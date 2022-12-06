@@ -1,12 +1,12 @@
 # Online Review Persistence Calls Repository
 
-This is a simple gRPC service that implements the [OR Persistence Calls](https://github.com/topcoder-platform/online-review-interface-definition/tree/main/proto) interfaces
+This is a simple gRPC service that implements the [OR Persistence Calls](https://github.com/topcoder-platform/online-review-interface-definition/tree/main/src/main/proto) interfaces
 
 # Note
 
 This is in the early stages of development and while it is functional and the interfaces are fully defined, it is not yet ready for production use.
 
-# Local Devlopment
+# Local Development
 
 1. Make sure you have [tc-dal-or-proto](https://github.com/topcoder-platform/online-review-interface-definition) installed on your local maven repository
 2. Make sure you have Informix running locally or on a remote server and that you can connect to it.
