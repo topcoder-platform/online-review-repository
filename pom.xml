@@ -4,7 +4,7 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-        <version>2.7.4</version>
+        <version>3.0.0</version>
         <relativePath /> <!-- lookup parent from repository -->
     </parent>
 
@@ -13,16 +13,16 @@
     <version>0.0.1-SNAPSHOT</version>
 
     <properties>
-        <maven.compiler.source>18</maven.compiler.source>
-        <maven.compiler.target>18</maven.compiler.target>
+        <maven.compiler.source>19</maven.compiler.source>
+        <maven.compiler.target>19</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
     <dependencies>
         <dependency>
             <groupId>net.devh</groupId>
-            <artifactId>grpc-spring-boot-starter</artifactId>
-            <version>2.13.1.RELEASE</version>
+            <artifactId>grpc-server-spring-boot-starter</artifactId>
+            <version>2.14.0.RELEASE</version>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
@@ -41,7 +41,6 @@
     </dependencies>
     <build>
         <plugins>
-
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
@@ -51,26 +50,26 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.8.0</version>
             </plugin>
-<!--            TODO: Setup Deploying docker image to ECR repository -->
-<!--            <plugin>-->
-<!--                <groupId>com.google.cloud.tools</groupId>-->
-<!--                <artifactId>jib-maven-plugin</artifactId>-->
-<!--                <version>3.3.0</version>-->
-<!--                <configuration>-->
-<!--                    <from>-->
-<!--                        <image>maven:3.8.6-openjdk-18</image>-->
-<!--                        <platforms>-->
-<!--                            <platform>-->
-<!--                                <architecture>arm64</architecture>-->
-<!--                                <os>linux</os>-->
-<!--                            </platform>-->
-<!--                        </platforms>-->
-<!--                    </from>-->
-<!--                    <to>-->
-<!--                        <image>public.ecr.aws/ACCOUNT_ID/tc-or-repository</image>-->
-<!--                    </to>-->
-<!--                </configuration>-->
-<!--            </plugin>-->
+            <!--            TODO: Setup Deploying docker image to ECR repository -->
+            <!--            <plugin>-->
+            <!--                <groupId>com.google.cloud.tools</groupId>-->
+            <!--                <artifactId>jib-maven-plugin</artifactId>-->
+            <!--                <version>3.3.0</version>-->
+            <!--                <configuration>-->
+            <!--                    <from>-->
+            <!--                        <image>maven:3.8.6-openjdk-18</image>-->
+            <!--                        <platforms>-->
+            <!--                            <platform>-->
+            <!--                                <architecture>arm64</architecture>-->
+            <!--                                <os>linux</os>-->
+            <!--                            </platform>-->
+            <!--                        </platforms>-->
+            <!--                    </from>-->
+            <!--                    <to>-->
+            <!--                        <image>public.ecr.aws/ACCOUNT_ID/tc-or-repository</image>-->
+            <!--                    </to>-->
+            <!--                </configuration>-->
+            <!--            </plugin>-->
 
         </plugins>
 
