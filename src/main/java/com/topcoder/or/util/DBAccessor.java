@@ -4,6 +4,7 @@ import org.slf4j.Logger;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Nullable;
@@ -24,38 +25,29 @@ public class DBAccessor {
     /**
      * Execute query operation.
      *
-     * @param query            The query clause, in format "from ... where ..."
-     * @param params           The parameters to bind to query, may be null
-     * @param returningColumns The columns to be returned
-     * @return query result
+     * @param <T>    This describes type of returning object
+     * @param query  The complete query clause
+     * @param params The parameters to bind to query, may be null
+     * @param mapper {@link org.springframework.jdbc.core.RowMapper RowMapper}
+     * @return Mapped query result
      * @throws DataAccessException exception
      */
-    public List<String[]> executeQuery(String query, String[] params, String[] returningColumns)
+    public <T> List<T> executeQuery(String query, RowMapper<T> mapper, @Nullable Object... args)
             throws DataAccessException {
-        String sql = "SELECT " + String.join(",", returningColumns) + " " + query;
-
-        this.logger.info("executeQuery: " + sql);
-        return jdbcTemplate.query(sql, (rs, _rowNum) -> {
-            String[] rowResult = new String[returningColumns.length];
-
-            for (int idx = 0; idx < returningColumns.length; idx++) {
-                Object value = rs.getObject(idx + 1);
-                rowResult[idx] = value == null ? null : value.toString();
-            }
-            return rowResult;
-        }, (Object[]) params);
+        logger.info("executeQuery: " + query + " with params: " + Arrays.toString(args));
+        return jdbcTemplate.query(query, mapper, args);
     }
 
     /**
      * Execute update operation.
      *
-     * @param query  The query clause
-     * @param args The parameters to bind to query, may be null
+     * @param query The query clause
+     * @param args  The parameters to bind to query, may be null
      * @return the number of rows affected
      * @throws DataAccessException exception
      */
-    public int executeUpdate(String query, @Nullable Object ...args) throws DataAccessException {
-        this.logger.info("executeUpdate: " + query + " with params: " + Arrays.toString(args));
+    public int executeUpdate(String query, @Nullable Object... args) throws DataAccessException {
+        logger.info("executeUpdate: " + query + " with params: " + Arrays.toString(args));
         return jdbcTemplate.update(query, args);
     }
 }

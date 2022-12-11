@@ -2,7 +2,7 @@ package com.topcoder.or.repository;
 
 import com.google.protobuf.Empty;
 import com.google.protobuf.Int64Value;
-import com.topcoder.onlinereview.contesteligibility.proto.*;
+import com.topcoder.onlinereview.grpc.contesteligibility.proto.*;
 import com.topcoder.or.util.DBAccessor;
 import io.grpc.Status;
 import io.grpc.stub.StreamObserver;
@@ -22,45 +22,38 @@ public class ContestEligibilityService extends ContestEligibilityServiceGrpc.Con
     }
 
     @Override
-    public void create(CreateRequest request, StreamObserver<Empty> responseObserver) {
+    public void create(CreateRequest request, StreamObserver<CreateResponse> responseObserver) {
+        Validation validation = validateCreateRequest(request);
+        if (!validation.isValid()) {
+            responseObserver
+                    .onError(Status.INVALID_ARGUMENT.withDescription(validation.getMessage()).asRuntimeException());
+            return;
+        }
         try {
             final long contestId = request.getContestId().getValue();
             final int isStudio = request.getStudio().getValue() ? 1 : 0;
 
-            this.dbAccessor
-                    .executeUpdate("insert into contest_eligibility(contest_eligibility_id, contest_id, is_studio) VALUES(CONTEST_ELIGIBILITY_SEQ.NEXTVAL, ?, ?)",
-                        contestId,
-                        isStudio
-                    );
-
-            responseObserver.onNext(Empty.getDefaultInstance());
+            int inserted = dbAccessor.executeUpdate(
+                    "insert into contest_eligibility(contest_eligibility_id, contest_id, is_studio) VALUES(CONTEST_ELIGIBILITY_SEQ.NEXTVAL, ?, ?)",
+                    contestId,
+                    isStudio);
+            if (inserted != 1) {
+                responseObserver.onError(Status.INTERNAL.withDescription("Insert failed").asRuntimeException());
+                return;
+            }
+            List<Int64Value> result = dbAccessor.executeQuery(
+                    "select max(contest_eligibility_id) from contest_eligibility where contest_id = ?", (rs, _i) -> {
+                        return Int64Value.of(rs.getLong(1));
+                    }, contestId);
+            CreateResponse.Builder rBuilder = CreateResponse.newBuilder();
+            if (!result.isEmpty()) {
+                rBuilder.setContestEligibilityId(result.get(0));
+            }
+            responseObserver.onNext(rBuilder.build());
             responseObserver.onCompleted();
         } catch (Throwable e) {
-            this.logger.error(e.getMessage(), e);
-            responseObserver.onError(Status.INVALID_ARGUMENT.withDescription(e.getMessage()).asRuntimeException());
-        }
-    }
-
-    @Override
-    public void getIdByContestId(GetIdByContestIdRequest request, StreamObserver<GetIdByContestIdResponse> responseObserver) {
-        try {
-            final long contestId = request.getContestId().getValue();
-
-            final List<String[]> result = this.dbAccessor
-                    .executeQuery("FROM contest_eligibility WHERE contest_id = ?", new String[]{String.valueOf(contestId)}, new String[]{"contest_eligibility_id"});
-
-            if (result.size() > 0) {
-                responseObserver.onNext(GetIdByContestIdResponse.newBuilder()
-                        .setContestEligibilityId(Int64Value.of(Long.parseLong(result.get(0)[0])))
-                        .build()
-                );
-                responseObserver.onCompleted();
-            } else {
-                responseObserver.onError(new Exception("No contest eligibility found for contest id " + contestId));
-            }
-        } catch (Throwable e) {
-            this.logger.error(e.getMessage(), e);
-            responseObserver.onError(e);
+            logger.error(e.getMessage(), e);
+            responseObserver.onError(Status.INTERNAL.withDescription(e.getMessage()).asRuntimeException());
         }
     }
 
@@ -80,12 +73,24 @@ public class ContestEligibilityService extends ContestEligibilityServiceGrpc.Con
     }
 
     @Override
-    public void getContestEligibility(GetContestEligibilityRequest request, StreamObserver<ContestEligibilitiesResponse> responseObserver) {
+    public void getContestEligibility(GetContestEligibilityRequest request,
+            StreamObserver<ContestEligibilitiesResponse> responseObserver) {
         super.getContestEligibility(request, responseObserver);
     }
 
     @Override
-    public void haveEligibility(HaveEligibilityRequest request, StreamObserver<HaveEligibilityResponse> responseObserver) {
+    public void haveEligibility(HaveEligibilityRequest request,
+            StreamObserver<HaveEligibilityResponse> responseObserver) {
         super.haveEligibility(request, responseObserver);
+    }
+
+    private Validation validateCreateRequest(CreateRequest createRequest) {
+        Validation validation = new Validation();
+        if (!createRequest.hasContestId()) {
+            validation.setRequiredFieldMessage("contestId");
+        } else if (!createRequest.hasStudio()) {
+            validation.setRequiredFieldMessage("studio");
+        }
+        return validation;
     }
 }
