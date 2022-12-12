@@ -1,6 +1,5 @@
 package com.topcoder.or.repository;
 
-import com.google.protobuf.BoolValue;
 import com.google.protobuf.Empty;
 import com.google.protobuf.Int64Value;
 import com.topcoder.onlinereview.grpc.contesteligibility.proto.*;
@@ -107,16 +106,16 @@ public class ContestEligibilityService extends ContestEligibilityServiceGrpc.Con
         List<GroupContestEligibilityProto> result = dbAccessor.executeQuery(sql, (rs, _i) -> {
             GroupContestEligibilityProto.Builder builder = GroupContestEligibilityProto.newBuilder();
             ResultSetHelper.applyResultSetLong(rs, 1, v -> {
-                builder.setContestEligibilityId(Int64Value.of(v));
+                builder.setContestEligibilityId(v);
             });
             ResultSetHelper.applyResultSetLong(rs, 2, v -> {
-                builder.setContestId(Int64Value.of(v));
+                builder.setContestId(v);
             });
             ResultSetHelper.applyResultSetBool(rs, 3, v -> {
-                builder.setStudio(BoolValue.of(v));
+                builder.setStudio(v);
             });
             ResultSetHelper.applyResultSetLong(rs, 4, v -> {
-                builder.setGroupId(Int64Value.of(v));
+                builder.setGroupId(v);
             });
             return builder.build();
         }, request.getStudio().getValue() ? 1 : 0, request.getContestId().getValue());
@@ -183,7 +182,7 @@ public class ContestEligibilityService extends ContestEligibilityServiceGrpc.Con
     }
 
     private void validateBulkRemoveRequest(BulkRemoveRequest request) {
-        Helper.assertObjectNotNull(() -> request.getContestEligibilityIdsList().isEmpty(), "contestEligibilityId");
+        Helper.assertObjectNotNull(() -> !request.getContestEligibilityIdsList().isEmpty(), "contestEligibilityId");
     }
 
     private void validateUpdateRequest(UpdateRequest request) {
@@ -199,7 +198,7 @@ public class ContestEligibilityService extends ContestEligibilityServiceGrpc.Con
 
     private void validateHaveEligibilityRequest(HaveEligibilityRequest request) {
         Helper.assertObjectNotNull(() -> request.hasStudio(), "studio");
-        Helper.assertObjectNotNull(() -> request.getContestIdsList().isEmpty(), "contestId");
+        Helper.assertObjectNotNull(() -> !request.getContestIdsList().isEmpty(), "contestId");
     }
 
     private void validateValidateUserContestEligibilityRequest(ValidateUserContestEligibilityRequest request) {
