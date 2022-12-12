@@ -1,6 +1,5 @@
 package com.topcoder.or.repository;
 
-import com.google.protobuf.Empty;
 import com.topcoder.onlinereview.grpc.deliverable.proto.*;
 import com.topcoder.or.util.DBAccessor;
 import com.topcoder.or.util.Helper;
@@ -10,6 +9,7 @@ import io.grpc.stub.StreamObserver;
 import net.devh.boot.grpc.server.service.GrpcService;
 
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -40,39 +40,17 @@ public class DeliverableService extends DeliverableServiceGrpc.DeliverableServic
                         null));
         List<DeliverableWithoutSubmissionProto> result = dbAccessor.executeQuery(sql, (rs, _i) -> {
             DeliverableWithoutSubmissionProto.Builder builder = DeliverableWithoutSubmissionProto.newBuilder();
-            ResultSetHelper.applyResultSetLong(rs, 1, v -> {
-                builder.setProjectId(v);
-            });
-            ResultSetHelper.applyResultSetLong(rs, 2, v -> {
-                builder.setProjectPhaseId(v);
-            });
-            ResultSetHelper.applyResultSetLong(rs, 3, v -> {
-                builder.setResourceId(v);
-            });
-            ResultSetHelper.applyResultSetBool(rs, 4, v -> {
-                builder.setRequired(v);
-            });
-            ResultSetHelper.applyResultSetLong(rs, 5, v -> {
-                builder.setDeliverableId(v);
-            });
-            ResultSetHelper.applyResultSetString(rs, 6, v -> {
-                builder.setCreateUser(v);
-            });
-            ResultSetHelper.applyResultSetTimestamp(rs, 7, v -> {
-                builder.setCreateDate(v);
-            });
-            ResultSetHelper.applyResultSetString(rs, 8, v -> {
-                builder.setModifyUser(v);
-            });
-            ResultSetHelper.applyResultSetTimestamp(rs, 9, v -> {
-                builder.setModifyDate(v);
-            });
-            ResultSetHelper.applyResultSetString(rs, 10, v -> {
-                builder.setName(v);
-            });
-            ResultSetHelper.applyResultSetString(rs, 11, v -> {
-                builder.setDescription(v);
-            });
+            ResultSetHelper.applyResultSetLong(rs, 1, builder::setProjectId);
+            ResultSetHelper.applyResultSetLong(rs, 2, builder::setProjectPhaseId);
+            ResultSetHelper.applyResultSetLong(rs, 3, builder::setResourceId);
+            ResultSetHelper.applyResultSetBool(rs, 4, builder::setRequired);
+            ResultSetHelper.applyResultSetLong(rs, 5, builder::setDeliverableId);
+            ResultSetHelper.applyResultSetString(rs, 6, builder::setCreateUser);
+            ResultSetHelper.applyResultSetTimestamp(rs, 7, builder::setCreateDate);
+            ResultSetHelper.applyResultSetString(rs, 8, builder::setModifyUser);
+            ResultSetHelper.applyResultSetTimestamp(rs, 9, builder::setModifyDate);
+            ResultSetHelper.applyResultSetString(rs, 10, builder::setName);
+            ResultSetHelper.applyResultSetString(rs, 11, builder::setDescription);
             return builder.build();
         });
         responseObserver.onNext(LoadDeliverablesWithoutSubmissionResponse.newBuilder()
@@ -100,42 +78,18 @@ public class DeliverableService extends DeliverableServiceGrpc.DeliverableServic
                         request.getSubmissionIdsList()));
         List<DeliverableWithSubmissionProto> result = dbAccessor.executeQuery(sql, (rs, _i) -> {
             DeliverableWithSubmissionProto.Builder builder = DeliverableWithSubmissionProto.newBuilder();
-            ResultSetHelper.applyResultSetLong(rs, 1, v -> {
-                builder.setProjectId(v);
-            });
-            ResultSetHelper.applyResultSetLong(rs, 2, v -> {
-                builder.setProjectPhaseId(v);
-            });
-            ResultSetHelper.applyResultSetLong(rs, 3, v -> {
-                builder.setResourceId(v);
-            });
-            ResultSetHelper.applyResultSetLong(rs, 4, v -> {
-                builder.setSubmissionId(v);
-            });
-            ResultSetHelper.applyResultSetBool(rs, 5, v -> {
-                builder.setRequired(v);
-            });
-            ResultSetHelper.applyResultSetLong(rs, 6, v -> {
-                builder.setDeliverableId(v);
-            });
-            ResultSetHelper.applyResultSetString(rs, 7, v -> {
-                builder.setCreateUser(v);
-            });
-            ResultSetHelper.applyResultSetTimestamp(rs, 8, v -> {
-                builder.setCreateDate(v);
-            });
-            ResultSetHelper.applyResultSetString(rs, 9, v -> {
-                builder.setModifyUser(v);
-            });
-            ResultSetHelper.applyResultSetTimestamp(rs, 10, v -> {
-                builder.setModifyDate(v);
-            });
-            ResultSetHelper.applyResultSetString(rs, 11, v -> {
-                builder.setName(v);
-            });
-            ResultSetHelper.applyResultSetString(rs, 12, v -> {
-                builder.setDescription(v);
-            });
+            ResultSetHelper.applyResultSetLong(rs, 1, builder::setProjectId);
+            ResultSetHelper.applyResultSetLong(rs, 2, builder::setProjectPhaseId);
+            ResultSetHelper.applyResultSetLong(rs, 3, builder::setResourceId);
+            ResultSetHelper.applyResultSetLong(rs, 4, builder::setSubmissionId);
+            ResultSetHelper.applyResultSetBool(rs, 5, builder::setRequired);
+            ResultSetHelper.applyResultSetLong(rs, 6, builder::setDeliverableId);
+            ResultSetHelper.applyResultSetString(rs, 7, builder::setCreateUser);
+            ResultSetHelper.applyResultSetTimestamp(rs, 8, builder::setCreateDate);
+            ResultSetHelper.applyResultSetString(rs, 9, builder::setModifyUser);
+            ResultSetHelper.applyResultSetTimestamp(rs, 10, builder::setModifyDate);
+            ResultSetHelper.applyResultSetString(rs, 11, builder::setName);
+            ResultSetHelper.applyResultSetString(rs, 12, builder::setDescription);
             return builder.build();
         });
         responseObserver.onNext(LoadDeliverablesWithSubmissionResponse.newBuilder()
@@ -146,7 +100,37 @@ public class DeliverableService extends DeliverableServiceGrpc.DeliverableServic
     @Override
     public void updateLateDeliverable(UpdateLateDeliverableRequest request,
             StreamObserver<UpdatedCountProto> responseObserver) {
-        super.updateLateDeliverable(request, responseObserver);
+        validateUpdateLateDeliverableRequest(request);
+        String sql = """
+                UPDATE late_deliverable SET project_phase_id = ?,
+                resource_id = ?, deliverable_id = ?, deadline = ?, compensated_deadline = ?, create_date = ?,
+                forgive_ind = ?, last_notified = ?, delay = ?, explanation = ?, explanation_date = ?, response = ?,
+                response_user = ?, response_date = ?, late_deliverable_type_id = ? WHERE late_deliverable_id = ?
+                    """;
+        final Long projectPhaseId = Helper.extract(request::hasProjectPhaseId, request::getProjectPhaseId);
+        final Long resourceId = Helper.extract(request::hasResourceId, request::getResourceId);
+        final Long deliverableId = Helper.extract(request::hasDeliverableId, request::getDeliverableId);
+        final Date deadline = Helper.extractDate(request::hasDeadline, request::getDeadline);
+        final Date compensatedDeadline = Helper.extractDate(request::hasCompensatedDeadline,
+                request::getCompensatedDeadline);
+        final Date createDate = Helper.extractDate(request::hasCreateDate, request::getCreateDate);
+        final Boolean forgiveInd = Helper.extract(request::hasForgiveInd, request::getForgiveInd);
+        final Date lastNotified = Helper.extractDate(request::hasLastNotified, request::getLastNotified);
+        final Long delay = Helper.extract(request::hasDelay, request::getDelay);
+        final String explanation = Helper.extract(request::hasExplanation, request::getExplanation);
+        final Date explanationDate = Helper.extractDate(request::hasExplanationDate, request::getExplanationDate);
+        final String response = Helper.extract(request::hasResponse, request::getResponse);
+        final String responseUser = Helper.extract(request::hasResponseUser, request::getResponseUser);
+        final Date responseDate = Helper.extractDate(request::hasResponseDate, request::getResponseDate);
+        final Long lateDeliverableTypeId = Helper.extract(request::hasLateDeliverableTypeId,
+                request::getLateDeliverableTypeId);
+        final Long lateDeliverableId = Helper.extract(request::hasLateDeliverableId, request::getLateDeliverableId);
+        final int updated = dbAccessor.executeUpdate(sql, projectPhaseId, resourceId, deliverableId, deadline,
+                compensatedDeadline,
+                createDate, forgiveInd, lastNotified, delay, explanation, explanationDate, response, responseUser,
+                responseDate, lateDeliverableTypeId, lateDeliverableId);
+        responseObserver.onNext(UpdatedCountProto.newBuilder().setCount(updated).build());
+        responseObserver.onCompleted();
     }
 
     /**
@@ -266,5 +250,15 @@ public class DeliverableService extends DeliverableServiceGrpc.DeliverableServic
             throw new IllegalArgumentException(
                     "deliverableIds, resourceIds, phaseIds and submissionIds should have the same number of elements.");
         }
+    }
+
+    private void validateUpdateLateDeliverableRequest(UpdateLateDeliverableRequest request) {
+        Helper.assertObjectNotNull(request::hasLateDeliverableId, "late_deliverable_id");
+        Helper.assertObjectNotNull(request::hasLateDeliverableTypeId, "late_deliverable_type_id");
+        Helper.assertObjectNotNull(request::hasProjectPhaseId, "project_phase_id");
+        Helper.assertObjectNotNull(request::hasResourceId, "resource_id");
+        Helper.assertObjectNotNull(request::hasDeliverableId, "deliverable_id");
+        Helper.assertObjectNotNull(request::hasCreateDate, "create_date");
+        Helper.assertObjectNotNull(request::hasForgiveInd, "forgive_ind");
     }
 }
