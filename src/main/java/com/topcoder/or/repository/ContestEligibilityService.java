@@ -111,9 +111,7 @@ public class ContestEligibilityService extends ContestEligibilityServiceGrpc.Con
         final Boolean studio = Helper.extract(request::hasStudio, request::getStudio);
         List<GroupContestEligibilityProto> result = dbAccessor.executeQuery(sql, (rs, _i) -> {
             GroupContestEligibilityProto.Builder builder = GroupContestEligibilityProto.newBuilder();
-            ResultSetHelper.applyResultSetLong(rs, 1, v -> {
-                builder.setContestEligibilityId(v);
-            });
+            ResultSetHelper.applyResultSetLong(rs, 1, builder::setContestEligibilityId);
             ResultSetHelper.applyResultSetLong(rs, 2, builder::setContestId);
             ResultSetHelper.applyResultSetBool(rs, 3, builder::setStudio);
             ResultSetHelper.applyResultSetLong(rs, 4, builder::setGroupId);

@@ -1,6 +1,10 @@
 package com.topcoder.or.repository;
 
+import com.google.protobuf.Empty;
 import com.topcoder.onlinereview.grpc.deliverable.proto.*;
+import com.topcoder.or.component.search.SearchBundle;
+import com.topcoder.or.component.search.SearchBundleManager;
+import com.topcoder.or.component.search.filter.Filter;
 import com.topcoder.or.util.DBAccessor;
 import com.topcoder.or.util.Helper;
 import com.topcoder.or.util.ResultSetHelper;
@@ -8,6 +12,8 @@ import com.topcoder.or.util.ResultSetHelper;
 import io.grpc.stub.StreamObserver;
 import net.devh.boot.grpc.server.service.GrpcService;
 
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashMap;
@@ -16,12 +22,41 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import javax.annotation.PostConstruct;
+
+import org.springframework.util.SerializationUtils;
+
 @GrpcService
 public class DeliverableService extends DeliverableServiceGrpc.DeliverableServiceImplBase {
     private final DBAccessor dbAccessor;
+    private final SearchBundleManager searchBundleManager;
 
-    public DeliverableService(DBAccessor dbAccessor) {
+    public static final String DELIVERABLE_SEARCH_BUNDLE_NAME = "Deliverable Search Bundle";
+    public static final String DELIVERABLE_WITH_SUBMISSIONS_SEARCH_BUNDLE_NAME = "Deliverable With Submission Search Bundle";
+    private static final String KEY_NON_RESTRICTED_SB_NAME = "Non-restricted Late Deliverable Search Bundle";
+    private static final String KEY_RESTRICTED_SB_NAME = "Restricted Late Deliverable Search Bundle";
+
+    private SearchBundle deliverableSearchBundle;
+    private SearchBundle deliverableWithSubmissionsSearchBundle;
+    private SearchBundle nonRestrictedSearchBundle;
+    private SearchBundle restrictedSearchBundle;
+
+    public DeliverableService(DBAccessor dbAccessor, SearchBundleManager searchBundleManager) {
         this.dbAccessor = dbAccessor;
+        this.searchBundleManager = searchBundleManager;
+    }
+
+    @PostConstruct
+    public void postRun() {
+        deliverableSearchBundle = searchBundleManager.getSearchBundle(DELIVERABLE_SEARCH_BUNDLE_NAME);
+        deliverableWithSubmissionsSearchBundle = searchBundleManager
+                .getSearchBundle(DELIVERABLE_WITH_SUBMISSIONS_SEARCH_BUNDLE_NAME);
+        nonRestrictedSearchBundle = searchBundleManager.getSearchBundle(KEY_NON_RESTRICTED_SB_NAME);
+        restrictedSearchBundle = searchBundleManager.getSearchBundle(KEY_RESTRICTED_SB_NAME);
+        Helper.setSearchableFields(
+                deliverableSearchBundle, Helper.DELIVERABLE_SEARCH_BUNDLE);
+        Helper.setSearchableFields(deliverableWithSubmissionsSearchBundle,
+                Helper.DELIVERABLE_WITH_SUBMISSIONS_SEARCH_BUNDLE);
     }
 
     @Override
@@ -130,6 +165,324 @@ public class DeliverableService extends DeliverableServiceGrpc.DeliverableServic
                 createDate, forgiveInd, lastNotified, delay, explanation, explanationDate, response, responseUser,
                 responseDate, lateDeliverableTypeId, lateDeliverableId);
         responseObserver.onNext(UpdatedCountProto.newBuilder().setCount(updated).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void getLateDeliverableTypes(Empty request, StreamObserver<LateDeliverableTypesResponse> responseObserver) {
+        String sql = """
+                SELECT late_deliverable_type_id, name, description
+                FROM late_deliverable_type_lu
+                    """;
+        List<LateDeliverableTypeProto> result = dbAccessor.executeQuery(sql, (rs, _i) -> {
+            LateDeliverableTypeProto.Builder builder = LateDeliverableTypeProto.newBuilder();
+            ResultSetHelper.applyResultSetLong(rs, 1, builder::setLateDeliverableTypeId);
+            ResultSetHelper.applyResultSetString(rs, 2, builder::setName);
+            ResultSetHelper.applyResultSetString(rs, 3, builder::setDescription);
+            return builder.build();
+        });
+        responseObserver.onNext(LateDeliverableTypesResponse.newBuilder().addAllLateDeliverableTypes(result).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void aggregationDeliverableCheck(AggregationDeliverableCheckRequest request,
+            StreamObserver<AggregationDeliverableCheckResponse> responseObserver) {
+        validateAggregationDeliverableCheckRequest(request);
+        String sql = """
+                SELECT modify_date
+                FROM review
+                WHERE committed = 1 AND resource_id = ?
+                    """;
+        final Long resourceId = Helper.extract(request::hasResourceId, request::getResourceId);
+        List<ModifyDateProto> result = dbAccessor.executeQuery(sql, (rs, _i) -> {
+            ModifyDateProto.Builder builder = ModifyDateProto.newBuilder();
+            ResultSetHelper.applyResultSetTimestamp(rs, 1, builder::setModifyDate);
+            return builder.build();
+        }, resourceId);
+        responseObserver.onNext(AggregationDeliverableCheckResponse.newBuilder().addAllModifyDates(result).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void appealResponsesDeliverableCheck(AppealResponsesDeliverableCheckRequest request,
+            StreamObserver<AppealResponsesDeliverableCheckResponse> responseObserver) {
+        validateAppealResponsesDeliverableCheckRequest(request);
+        String sql = """
+                SELECT appeal_response_comment.modify_date
+                FROM review_item_comment appeal_comment
+                INNER JOIN comment_type_lu appeal_comment_type ON appeal_comment.comment_type_id = appeal_comment_type.comment_type_id AND appeal_comment_type.name = 'Appeal'
+                INNER JOIN review_item ON appeal_comment.review_item_id = review_item.review_item_id
+                INNER JOIN review ON review_item.review_id = review.review_id AND review.resource_id = ? AND review.submission_id = ?
+                LEFT OUTER JOIN (review_item_comment appeal_response_comment INNER JOIN comment_type_lu appeal_response_comment_type ON appeal_response_comment.comment_type_id = appeal_response_comment_type.comment_type_id AND appeal_response_comment_type.name = 'Appeal Response') ON appeal_response_comment.review_item_id = appeal_comment.review_item_id
+                        """;
+        final Long resourceId = Helper.extract(request::hasResourceId, request::getResourceId);
+        final Long submissionId = Helper.extract(request::hasSubmissionId, request::getSubmissionId);
+        List<ModifyDateProto> result = dbAccessor.executeQuery(sql, (rs, _i) -> {
+            ModifyDateProto.Builder builder = ModifyDateProto.newBuilder();
+            ResultSetHelper.applyResultSetTimestamp(rs, 1, builder::setModifyDate);
+            return builder.build();
+        }, resourceId, submissionId);
+        responseObserver.onNext(AppealResponsesDeliverableCheckResponse.newBuilder().addAllModifyDates(result).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void committedReviewDeliverableCheck(CommittedReviewDeliverableCheckRequest request,
+            StreamObserver<CommittedReviewDeliverableCheckResponse> responseObserver) {
+        validateCommittedReviewDeliverableCheckRequest(request);
+        String sql = """
+                SELECT modify_date FROM review WHERE committed = 1 AND resource_id = ? AND project_phase_id = ?
+                """;
+        final Boolean isPerSubmission = Helper.extract(request::hasIsPerSubmission, request::getIsPerSubmission);
+        final Long resourceId = Helper.extract(request::hasResourceId, request::getResourceId);
+        final Long projectPhaseId = Helper.extract(request::hasProjectPhaseId, request::getProjectPhaseId);
+        final Long submissionId = Helper.extract(request::hasSubmissionId, request::getSubmissionId);
+        List<Object> params = new ArrayList<>() {
+            {
+                add(resourceId);
+                add(resourceId);
+                add(projectPhaseId);
+            }
+        };
+        if (isPerSubmission) {
+            sql = sql + " AND submission_id = ?";
+            params.add(submissionId);
+        }
+        List<ModifyDateProto> result = dbAccessor.executeQuery(sql, (rs, _i) -> {
+            ModifyDateProto.Builder builder = ModifyDateProto.newBuilder();
+            ResultSetHelper.applyResultSetTimestamp(rs, 1, builder::setModifyDate);
+            return builder.build();
+        }, params.toArray());
+        responseObserver.onNext(CommittedReviewDeliverableCheckResponse.newBuilder().addAllModifyDates(result).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void finalFixesDeliverableCheck(FinalFixesDeliverableCheckRequest request,
+            StreamObserver<FinalFixesDeliverableCheckResponse> responseObserver) {
+        validateFinalFixesDeliverableCheckRequest(request);
+        String sql = """
+                SELECT MAX(upload.modify_date) as modify_date FROM upload
+                INNER JOIN upload_type_lu ON upload.upload_type_id = upload_type_lu.upload_type_id
+                WHERE upload_type_lu.name = 'Final Fix'
+                AND upload.project_phase_id = ? AND upload.resource_id = ?
+                """;
+        final Long projectPhaseId = Helper.extract(request::hasProjectPhaseId, request::getProjectPhaseId);
+        final Long resourceId = Helper.extract(request::hasResourceId, request::getResourceId);
+        List<ModifyDateProto> result = dbAccessor.executeQuery(sql, (rs, _i) -> {
+            ModifyDateProto.Builder builder = ModifyDateProto.newBuilder();
+            ResultSetHelper.applyResultSetTimestamp(rs, 1, builder::setModifyDate);
+            return builder.build();
+        }, projectPhaseId, resourceId);
+        responseObserver.onNext(FinalFixesDeliverableCheckResponse.newBuilder().addAllModifyDates(result).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void finalReviewDeliverableCheck(FinalReviewDeliverableCheckRequest request,
+            StreamObserver<FinalReviewDeliverableCheckResponse> responseObserver) {
+        validateFinalReviewDeliverableCheckRequest(request);
+        String sql = """
+                SELECT MAX(review_comment.modify_date) as modify_date, review.submission_id FROM review_comment
+                INNER JOIN comment_type_lu ON review_comment.comment_type_id = comment_type_lu.comment_type_id
+                INNER JOIN review ON review.review_id = review_comment.review_id
+                WHERE review_comment.resource_id = ?
+                AND comment_type_lu.name = 'Final Review Comment'
+                AND (review_comment.extra_info = 'Approved' OR review_comment.extra_info = 'Rejected')
+                GROUP BY review.submission_id
+                """;
+        final Long resourceId = Helper.extract(request::hasResourceId, request::getResourceId);
+        List<FinalReviewDeliverableCheckResponseMessage> result = dbAccessor.executeQuery(sql, (rs, _i) -> {
+            FinalReviewDeliverableCheckResponseMessage.Builder builder = FinalReviewDeliverableCheckResponseMessage
+                    .newBuilder();
+            ResultSetHelper.applyResultSetTimestamp(rs, 1, builder::setModifyDate);
+            ResultSetHelper.applyResultSetLong(rs, 2, builder::setSubmissionId);
+            return builder.build();
+        }, resourceId);
+        responseObserver.onNext(FinalReviewDeliverableCheckResponse.newBuilder().addAllResults(result).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void individualReviewDeliverableCheck(IndividualReviewDeliverableCheckRequest request,
+            StreamObserver<IndividualReviewDeliverableCheckResponse> responseObserver) {
+        validateIndividualReviewDeliverableCheckRequest(request);
+        String sql = """
+                SELECT review.modify_date, resource_submission.submission_id
+                FROM resource_submission
+                LEFT JOIN review ON review.resource_id = resource_submission.resource_id
+                AND review.submission_id = resource_submission.submission_id AND committed = 1
+                WHERE resource_submission.resource_id = ?
+                """;
+        final Long resourceId = Helper.extract(request::hasResourceId, request::getResourceId);
+        List<IndividualReviewDeliverableCheckResponseMessage> result = dbAccessor.executeQuery(sql, (rs, _i) -> {
+            IndividualReviewDeliverableCheckResponseMessage.Builder builder = IndividualReviewDeliverableCheckResponseMessage
+                    .newBuilder();
+            ResultSetHelper.applyResultSetTimestamp(rs, 1, builder::setModifyDate);
+            ResultSetHelper.applyResultSetLong(rs, 2, builder::setSubmissionId);
+            return builder.build();
+        }, resourceId);
+        responseObserver.onNext(IndividualReviewDeliverableCheckResponse.newBuilder().addAllResults(result).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void specificationSubmissionDeliverableCheck(SpecificationSubmissionDeliverableCheckRequest request,
+            StreamObserver<SpecificationSubmissionDeliverableCheckResponse> responseObserver) {
+        validateSpecificationSubmissionDeliverableCheckRequest(request);
+        String sql = """
+                SELECT s.modify_date
+                FROM submission s
+                INNER JOIN upload u ON s.upload_id = u.upload_id
+                WHERE s.submission_status_id <> 5
+                AND s.submission_type_id = 2
+                AND u.resource_id = ?
+                AND u.project_phase_id = ?
+                """;
+        final Long projectPhaseId = Helper.extract(request::hasProjectPhaseId, request::getProjectPhaseId);
+        final Long resourceId = Helper.extract(request::hasResourceId, request::getResourceId);
+        List<ModifyDateProto> result = dbAccessor.executeQuery(sql, (rs, _i) -> {
+            ModifyDateProto.Builder builder = ModifyDateProto.newBuilder();
+            ResultSetHelper.applyResultSetTimestamp(rs, 1, builder::setModifyDate);
+            return builder.build();
+        }, resourceId, projectPhaseId);
+        responseObserver
+                .onNext(SpecificationSubmissionDeliverableCheckResponse.newBuilder().addAllModifyDates(result).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void submissionDeliverableCheck(SubmissionDeliverableCheckRequest request,
+            StreamObserver<SubmissionDeliverableCheckResponse> responseObserver) {
+        validateSubmissionDeliverableCheckRequest(request);
+        String sql = """
+                SELECT MAX(upload.modify_date) as modify_date FROM upload
+                INNER JOIN upload_type_lu ON upload.upload_type_id = upload_type_lu.upload_type_id
+                INNER JOIN upload_status_lu ON upload.upload_status_id = upload_status_lu.upload_status_id
+                LEFT JOIN submission ON upload.upload_id = submission.upload_id
+                WHERE upload_type_lu.name = 'Submission' AND upload_status_lu.name = 'Active'
+                AND upload.resource_id = ? AND submission.submission_type_id = ?
+                """;
+        final Long resourceId = Helper.extract(request::hasResourceId, request::getResourceId);
+        final Long submissionTypeId = Helper.extract(request::hasSubmissionTypeId, request::getSubmissionTypeId);
+        List<ModifyDateProto> result = dbAccessor.executeQuery(sql, (rs, _i) -> {
+            ModifyDateProto.Builder builder = ModifyDateProto.newBuilder();
+            ResultSetHelper.applyResultSetTimestamp(rs, 1, builder::setModifyDate);
+            return builder.build();
+        }, resourceId, submissionTypeId);
+        responseObserver
+                .onNext(SubmissionDeliverableCheckResponse.newBuilder().addAllModifyDates(result).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void submitterCommentDeliverableCheck(SubmitterCommentDeliverableCheckRequest request,
+            StreamObserver<SubmitterCommentDeliverableCheckResponse> responseObserver) {
+        validateSubmitterCommentDeliverableCheckRequest(request);
+        String sql = """
+                SELECT MAX(review_comment.modify_date) as modify_date, review.submission_id FROM review_comment
+                INNER JOIN comment_type_lu ON review_comment.comment_type_id = comment_type_lu.comment_type_id
+                INNER JOIN review ON review.review_id = review_comment.review_id
+                INNER JOIN resource ON review.resource_id = resource.resource_id
+                INNER JOIN phase_dependency ON resource.project_phase_id = phase_dependency.dependency_phase_id
+                WHERE review_comment.resource_id = ?
+                AND phase_dependency.dependent_phase_id = ?
+                AND comment_type_lu.name = 'Submitter Comment'
+                AND (review_comment.extra_info = 'Approved' OR review_comment.extra_info = 'Rejected')
+                GROUP BY review.submission_id
+                """;
+        final Long resourceId = Helper.extract(request::hasResourceId, request::getResourceId);
+        final Long projectPhaseId = Helper.extract(request::hasProjectPhaseId, request::getProjectPhaseId);
+        List<SubmitterCommentDeliverableCheckResponseMessage> result = dbAccessor.executeQuery(sql, (rs, _i) -> {
+            SubmitterCommentDeliverableCheckResponseMessage.Builder builder = SubmitterCommentDeliverableCheckResponseMessage
+                    .newBuilder();
+            ResultSetHelper.applyResultSetTimestamp(rs, 1, builder::setModifyDate);
+            ResultSetHelper.applyResultSetLong(rs, 2, builder::setSubmissionId);
+            return builder.build();
+        }, resourceId, projectPhaseId);
+        responseObserver.onNext(SubmitterCommentDeliverableCheckResponse.newBuilder().addAllResults(result).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void testCasesDeliverableCheck(TestCasesDeliverableCheckRequest request,
+            StreamObserver<TestCasesDeliverableCheckResponse> responseObserver) {
+        validateTestCasesDeliverableCheckRequest(request);
+        String sql = """
+                SELECT MAX(upload.modify_date) as modify_date
+                FROM upload
+                INNER JOIN upload_type_lu ON upload.upload_type_id = upload_type_lu.upload_type_id
+                INNER JOIN upload_status_lu ON upload.upload_status_id = upload_status_lu.upload_status_id
+                WHERE upload_type_lu.name = 'Test Case' AND upload_status_lu.name = 'Active'
+                AND upload.resource_id = ?
+                """;
+        final Long resourceId = Helper.extract(request::hasResourceId, request::getResourceId);
+        List<ModifyDateProto> result = dbAccessor.executeQuery(sql, (rs, _i) -> {
+            ModifyDateProto.Builder builder = ModifyDateProto.newBuilder();
+            ResultSetHelper.applyResultSetTimestamp(rs, 1, builder::setModifyDate);
+            return builder.build();
+        }, resourceId);
+        responseObserver.onNext(TestCasesDeliverableCheckResponse.newBuilder().addAllModifyDates(result).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void searchDeliverables(FilterProto request, StreamObserver<SearchDeliverablesResponse> responseObserver) {
+        Filter filter = (Filter) SerializationUtils.deserialize(request.getFilter().toByteArray());
+        List<SearchDeliverablesProto> result = deliverableSearchBundle.search(filter, (rs, _i) -> {
+            SearchDeliverablesProto.Builder builder = SearchDeliverablesProto.newBuilder();
+            ResultSetHelper.applyResultSetLong(rs, 1, builder::setDeliverableId);
+            ResultSetHelper.applyResultSetLong(rs, 2, builder::setResourceId);
+            ResultSetHelper.applyResultSetLong(rs, 3, builder::setProjectPhaseId);
+            return builder.build();
+        });
+        responseObserver.onNext(SearchDeliverablesResponse.newBuilder().addAllDeliverables(result).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void searchDeliverablesWithSubmission(FilterProto request,
+            StreamObserver<SearchDeliverablesWithSubmissionResponse> responseObserver) {
+        Filter filter = (Filter) SerializationUtils.deserialize(request.getFilter().toByteArray());
+        List<SearchDeliverablesWithSubmissionProto> result = deliverableWithSubmissionsSearchBundle.search(filter,
+                (rs, _i) -> {
+                    SearchDeliverablesWithSubmissionProto.Builder builder = SearchDeliverablesWithSubmissionProto
+                            .newBuilder();
+                    ResultSetHelper.applyResultSetLong(rs, 1, builder::setDeliverableId);
+                    ResultSetHelper.applyResultSetLong(rs, 2, builder::setResourceId);
+                    ResultSetHelper.applyResultSetLong(rs, 3, builder::setProjectPhaseId);
+                    ResultSetHelper.applyResultSetLong(rs, 4, builder::setSubmissionId);
+                    return builder.build();
+                });
+        responseObserver
+                .onNext(SearchDeliverablesWithSubmissionResponse.newBuilder().addAllDeliverables(result).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void searchLateDeliverablesNonRestricted(FilterProto request,
+            StreamObserver<SearchLateDeliverablesResponse> responseObserver) {
+        Filter filter = (Filter) SerializationUtils.deserialize(request.getFilter().toByteArray());
+        List<LateDeliverablesProto> result = nonRestrictedSearchBundle.search(filter,
+                (rs, _i) -> {
+                    return loadLateDeliverablesFromSearch(rs);
+                });
+        responseObserver
+                .onNext(SearchLateDeliverablesResponse.newBuilder().addAllLateDeliverables(result).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void searchLateDeliverablesRestricted(FilterProto request,
+            StreamObserver<SearchLateDeliverablesResponse> responseObserver) {
+        Filter filter = (Filter) SerializationUtils.deserialize(request.getFilter().toByteArray());
+        List<LateDeliverablesProto> result = restrictedSearchBundle.search(filter,
+                (rs, _i) -> {
+                    return loadLateDeliverablesFromSearch(rs);
+                });
+        responseObserver
+                .onNext(SearchLateDeliverablesResponse.newBuilder().addAllLateDeliverables(result).build());
         responseObserver.onCompleted();
     }
 
@@ -260,5 +613,83 @@ public class DeliverableService extends DeliverableServiceGrpc.DeliverableServic
         Helper.assertObjectNotNull(request::hasDeliverableId, "deliverable_id");
         Helper.assertObjectNotNull(request::hasCreateDate, "create_date");
         Helper.assertObjectNotNull(request::hasForgiveInd, "forgive_ind");
+    }
+
+    private void validateAggregationDeliverableCheckRequest(AggregationDeliverableCheckRequest request) {
+        Helper.assertObjectNotNull(request::hasResourceId, "resource_id");
+    }
+
+    private void validateAppealResponsesDeliverableCheckRequest(AppealResponsesDeliverableCheckRequest request) {
+        Helper.assertObjectNotNull(request::hasResourceId, "resource_id");
+        Helper.assertObjectNotNull(request::hasSubmissionId, "submission_id");
+    }
+
+    private void validateCommittedReviewDeliverableCheckRequest(CommittedReviewDeliverableCheckRequest request) {
+        Helper.assertObjectNotNull(request::hasIsPerSubmission, "is_per_submission");
+        Helper.assertObjectNotNull(request::hasResourceId, "resource_id");
+        Helper.assertObjectNotNull(request::hasProjectPhaseId, "project_phase_id");
+        if (request.getIsPerSubmission()) {
+            Helper.assertObjectNotNull(request::hasSubmissionId, "submission_id");
+        }
+    }
+
+    private void validateFinalFixesDeliverableCheckRequest(FinalFixesDeliverableCheckRequest request) {
+        Helper.assertObjectNotNull(request::hasProjectPhaseId, "project_phase_id");
+        Helper.assertObjectNotNull(request::hasResourceId, "resource_id");
+    }
+
+    private void validateFinalReviewDeliverableCheckRequest(FinalReviewDeliverableCheckRequest request) {
+        Helper.assertObjectNotNull(request::hasResourceId, "resource_id");
+    }
+
+    private void validateIndividualReviewDeliverableCheckRequest(IndividualReviewDeliverableCheckRequest request) {
+        Helper.assertObjectNotNull(request::hasResourceId, "resource_id");
+    }
+
+    private void validateSpecificationSubmissionDeliverableCheckRequest(
+            SpecificationSubmissionDeliverableCheckRequest request) {
+        Helper.assertObjectNotNull(request::hasProjectPhaseId, "project_phase_id");
+        Helper.assertObjectNotNull(request::hasResourceId, "resource_id");
+    }
+
+    private void validateSubmissionDeliverableCheckRequest(SubmissionDeliverableCheckRequest request) {
+        Helper.assertObjectNotNull(request::hasSubmissionTypeId, "submission_type_id");
+        Helper.assertObjectNotNull(request::hasResourceId, "resource_id");
+    }
+
+    private void validateSubmitterCommentDeliverableCheckRequest(SubmitterCommentDeliverableCheckRequest request) {
+        Helper.assertObjectNotNull(request::hasResourceId, "resource_id");
+        Helper.assertObjectNotNull(request::hasProjectPhaseId, "project_phase_id");
+    }
+
+    private void validateTestCasesDeliverableCheckRequest(TestCasesDeliverableCheckRequest request) {
+        Helper.assertObjectNotNull(request::hasResourceId, "resource_id");
+    }
+
+    private LateDeliverablesProto loadLateDeliverablesFromSearch(ResultSet rs) throws SQLException {
+        LateDeliverablesProto.Builder builder = LateDeliverablesProto
+                .newBuilder();
+        ResultSetHelper.applyResultSetLong(rs, "late_deliverable_id", builder::setLateDeliverableId);
+        ResultSetHelper.applyResultSetLong(rs, "project_id", builder::setProjectId);
+        ResultSetHelper.applyResultSetLong(rs, "project_phase_id", builder::setProjectPhaseId);
+        ResultSetHelper.applyResultSetLong(rs, "resource_id", builder::setResourceId);
+        ResultSetHelper.applyResultSetLong(rs, "deliverable_id", builder::setDeliverableId);
+        ResultSetHelper.applyResultSetTimestamp(rs, "deadline", builder::setDeadline);
+        ResultSetHelper.applyResultSetTimestamp(rs, "compensated_deadline",
+                builder::setCompensatedDeadline);
+        ResultSetHelper.applyResultSetTimestamp(rs, "create_date", builder::setCreateDate);
+        ResultSetHelper.applyResultSetBool(rs, "forgive_ind", builder::setForgiveInd);
+        ResultSetHelper.applyResultSetTimestamp(rs, "last_notified", builder::setLastNotified);
+        ResultSetHelper.applyResultSetLong(rs, "delay", builder::setDelay);
+        ResultSetHelper.applyResultSetString(rs, "explanation", builder::setExplanation);
+        ResultSetHelper.applyResultSetTimestamp(rs, "explanation_date", builder::setExplanationDate);
+        ResultSetHelper.applyResultSetString(rs, "response", builder::setResponse);
+        ResultSetHelper.applyResultSetString(rs, "response_user", builder::setResponseUser);
+        ResultSetHelper.applyResultSetTimestamp(rs, "response_date", builder::setResponseDate);
+        ResultSetHelper.applyResultSetLong(rs, "late_deliverable_type_id",
+                builder::setLateDeliverableTypeId);
+        ResultSetHelper.applyResultSetString(rs, "name", builder::setName);
+        ResultSetHelper.applyResultSetString(rs, "description", builder::setDescription);
+        return builder.build();
     }
 }

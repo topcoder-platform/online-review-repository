@@ -1,7 +1,6 @@
 package com.topcoder.or.util;
 
 import org.slf4j.Logger;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
@@ -16,7 +15,6 @@ public class DBAccessor {
     private final JdbcTemplate jdbcTemplate;
     private final Logger logger;
 
-    @Autowired
     public DBAccessor(JdbcTemplate jdbcTemplate, Logger logger) {
         this.jdbcTemplate = jdbcTemplate;
         this.logger = logger;
