@@ -24,6 +24,38 @@ public final class ResultSetHelper {
         }
     }
 
+    public static void applyResultSetDouble(ResultSet resultset, int index, Consumer<Double> setMethod)
+            throws SQLException {
+        double v = resultset.getDouble(index);
+        if (!resultset.wasNull()) {
+            setMethod.accept(v);
+        }
+    }
+
+    public static void applyResultSetDouble(ResultSet resultset, String name, Consumer<Double> setMethod)
+            throws SQLException {
+        double v = resultset.getDouble(name);
+        if (!resultset.wasNull()) {
+            setMethod.accept(v);
+        }
+    }
+
+    public static void applyResultSetInt(ResultSet resultset, int index, Consumer<Integer> setMethod)
+            throws SQLException {
+        int v = resultset.getInt(index);
+        if (!resultset.wasNull()) {
+            setMethod.accept(v);
+        }
+    }
+
+    public static void applyResultSetInt(ResultSet resultset, String name, Consumer<Integer> setMethod)
+            throws SQLException {
+        int v = resultset.getInt(name);
+        if (!resultset.wasNull()) {
+            setMethod.accept(v);
+        }
+    }
+
     public static void applyResultSetBool(ResultSet resultset, int index, Consumer<Boolean> setMethod)
             throws SQLException {
         boolean v = resultset.getBoolean(index);

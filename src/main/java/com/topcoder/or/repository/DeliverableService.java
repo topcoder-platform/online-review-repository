@@ -2,9 +2,9 @@ package com.topcoder.or.repository;
 
 import com.google.protobuf.Empty;
 import com.topcoder.onlinereview.grpc.deliverable.proto.*;
-import com.topcoder.or.component.search.SearchBundle;
-import com.topcoder.or.component.search.SearchBundleManager;
-import com.topcoder.or.component.search.filter.Filter;
+import com.topcoder.onlinereview.component.search.SearchBundle;
+import com.topcoder.onlinereview.component.search.SearchBundleManager;
+import com.topcoder.onlinereview.component.search.filter.Filter;
 import com.topcoder.or.util.DBAccessor;
 import com.topcoder.or.util.Helper;
 import com.topcoder.or.util.ResultSetHelper;
@@ -582,9 +582,9 @@ public class DeliverableService extends DeliverableServiceGrpc.DeliverableServic
     }
 
     private void validateLoadDeliverablesWithoutSubmissionRequest(LoadDeliverablesWithoutSubmissionRequest request) {
-        Helper.assertObjectNotNull(() -> !request.getDeliverableIdsList().isEmpty(), "deliverable_ids");
-        Helper.assertObjectNotNull(() -> !request.getPhaseIdsList().isEmpty(), "phase_ids");
-        Helper.assertObjectNotNull(() -> !request.getResourceIdsList().isEmpty(), "resource_ids");
+        Helper.assertObjectNotEmpty(request::getDeliverableIdsCount, "deliverable_ids");
+        Helper.assertObjectNotEmpty(request::getPhaseIdsCount, "phase_ids");
+        Helper.assertObjectNotEmpty(request::getResourceIdsCount, "resource_ids");
         if (request.getDeliverableIdsCount() != request.getResourceIdsCount()
                 || request.getDeliverableIdsCount() != request.getPhaseIdsCount()) {
             throw new IllegalArgumentException(
@@ -593,10 +593,10 @@ public class DeliverableService extends DeliverableServiceGrpc.DeliverableServic
     }
 
     private void validateLoadDeliverablesWithSubmissionRequest(LoadDeliverablesWithSubmissionRequest request) {
-        Helper.assertObjectNotNull(() -> !request.getDeliverableIdsList().isEmpty(), "deliverable_ids");
-        Helper.assertObjectNotNull(() -> !request.getPhaseIdsList().isEmpty(), "phase_ids");
-        Helper.assertObjectNotNull(() -> !request.getResourceIdsList().isEmpty(), "resource_ids");
-        Helper.assertObjectNotNull(() -> !request.getSubmissionIdsList().isEmpty(), "submission_ids");
+        Helper.assertObjectNotEmpty(request::getDeliverableIdsCount, "deliverable_ids");
+        Helper.assertObjectNotEmpty(request::getPhaseIdsCount, "phase_ids");
+        Helper.assertObjectNotEmpty(request::getResourceIdsCount, "resource_ids");
+        Helper.assertObjectNotEmpty(request::getSubmissionIdsCount, "submission_ids");
         if (request.getDeliverableIdsCount() != request.getResourceIdsCount()
                 || request.getDeliverableIdsCount() != request.getPhaseIdsCount()
                 || request.getDeliverableIdsCount() != request.getSubmissionIdsCount()) {

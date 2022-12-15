@@ -2,10 +2,10 @@
     xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
     xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans-2.5.xsd">
 
-    <bean id="searchBundleConfig" class="com.topcoder.or.component.search.SearchBundleConfig">
+    <bean id="searchBundleConfig" class="com.topcoder.onlinereview.component.search.SearchBundleConfig">
         <property name="data">
             <list>
-                <bean class="com.topcoder.or.component.search.SearchBundleConfig.ConfigData">
+                <bean class="com.topcoder.onlinereview.component.search.SearchBundleConfig.ConfigData">
                     <property name="name" value="ProjectSearchBundle" />
                     <property name="context">
                         <value>
@@ -39,7 +39,7 @@
                         </list>
                     </property>
                 </bean>
-                <bean class="com.topcoder.or.component.search.SearchBundleConfig.ConfigData">
+                <bean class="com.topcoder.onlinereview.component.search.SearchBundleConfig.ConfigData">
                     <property name="name" value="ScorecardSearchBundle" />
                     <property name="context">
                         <value>
@@ -63,7 +63,7 @@
                         </list>
                     </property>
                 </bean>
-                <bean class="com.topcoder.or.component.search.SearchBundleConfig.ConfigData">
+                <bean class="com.topcoder.onlinereview.component.search.SearchBundleConfig.ConfigData">
                     <property name="name" value="Deliverable Search Bundle" />
                     <property name="context">
                         <value>
@@ -86,7 +86,7 @@
                         </list>
                     </property>
                 </bean>
-                <bean class="com.topcoder.or.component.search.SearchBundleConfig.ConfigData">
+                <bean class="com.topcoder.onlinereview.component.search.SearchBundleConfig.ConfigData">
                     <property name="name" value="Deliverable With Submission Search Bundle" />
                     <property name="context">
                         <value>
@@ -104,7 +104,7 @@
                         </list>
                     </property>
                 </bean>
-                <bean class="com.topcoder.or.component.search.SearchBundleConfig.ConfigData">
+                <bean class="com.topcoder.onlinereview.component.search.SearchBundleConfig.ConfigData">
                     <property name="name" value="Submission Search Bundle" />
                     <property name="context">
                         <value>
@@ -130,7 +130,7 @@
                         </list>
                     </property>
                 </bean>
-                <bean class="com.topcoder.or.component.search.SearchBundleConfig.ConfigData">
+                <bean class="com.topcoder.onlinereview.component.search.SearchBundleConfig.ConfigData">
                     <property name="name" value="Upload Search Bundle" />
                     <property name="context">
                         <value>
@@ -153,7 +153,7 @@
                         </list>
                     </property>
                 </bean>
-                <bean class="com.topcoder.or.component.search.SearchBundleConfig.ConfigData">
+                <bean class="com.topcoder.onlinereview.component.search.SearchBundleConfig.ConfigData">
                     <property name="name" value="Resource Search Bundle" />
                     <property name="context">
                         <value>
@@ -178,7 +178,7 @@
                         </list>
                     </property>
                 </bean>
-                <bean class="com.topcoder.or.component.search.SearchBundleConfig.ConfigData">
+                <bean class="com.topcoder.onlinereview.component.search.SearchBundleConfig.ConfigData">
                     <property name="name" value="Resource Role Search Bundle" />
                     <property name="context">
                         <value>
@@ -198,7 +198,7 @@
                         </list>
                     </property>
                 </bean>
-                <bean class="com.topcoder.or.component.search.SearchBundleConfig.ConfigData">
+                <bean class="com.topcoder.onlinereview.component.search.SearchBundleConfig.ConfigData">
                     <property name="name" value="Notification Search Bundle" />
                     <property name="context">
                         <value>
@@ -218,7 +218,7 @@
                         </list>
                     </property>
                 </bean>
-                <bean class="com.topcoder.or.component.search.SearchBundleConfig.ConfigData">
+                <bean class="com.topcoder.onlinereview.component.search.SearchBundleConfig.ConfigData">
                     <property name="name" value="Notification Type Search Bundle" />
                     <property name="context">
                         <value>
@@ -237,7 +237,7 @@
                         </list>
                     </property>
                 </bean>
-                <bean class="com.topcoder.or.component.search.SearchBundleConfig.ConfigData">
+                <bean class="com.topcoder.onlinereview.component.search.SearchBundleConfig.ConfigData">
                     <property name="name" value="Review Search Bundle" />
                     <property name="context">
                         <value>
@@ -267,7 +267,7 @@
                         </list>
                     </property>
                 </bean>
-                <bean class="com.topcoder.or.component.search.SearchBundleConfig.ConfigData">
+                <bean class="com.topcoder.onlinereview.component.search.SearchBundleConfig.ConfigData">
                     <property name="name" value="ProjectPaymentSearchBundle" />
                     <property name="context">
                         <value>
@@ -295,7 +295,7 @@
                         </list>
                     </property>
                 </bean>
-                <bean class="com.topcoder.or.component.search.SearchBundleConfig.ConfigData">
+                <bean class="com.topcoder.onlinereview.component.search.SearchBundleConfig.ConfigData">
                     <property name="name" value="Non-restricted Late Deliverable Search Bundle" />
                     <property name="context">
                         <value>
@@ -356,7 +356,7 @@
                         </list>
                     </property>
                 </bean>
-                <bean class="com.topcoder.or.component.search.SearchBundleConfig.ConfigData">
+                <bean class="com.topcoder.onlinereview.component.search.SearchBundleConfig.ConfigData">
                     <property name="name" value="Restricted Late Deliverable Search Bundle" />
                     <property name="context">
                         <value>

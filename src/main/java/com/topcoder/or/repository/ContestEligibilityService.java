@@ -11,7 +11,6 @@ import io.grpc.stub.StreamObserver;
 import net.devh.boot.grpc.server.service.GrpcService;
 
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 @GrpcService
@@ -74,7 +73,7 @@ public class ContestEligibilityService extends ContestEligibilityServiceGrpc.Con
                 delete from common_oltp:contest_eligibility
                 where contest_eligibility_id in (%s)
                     """;
-        String inSql = String.join(",", Collections.nCopies(request.getContestEligibilityIdsCount(), "?"));
+        String inSql = Helper.getInClause(request.getContestEligibilityIdsCount());
         dbAccessor.executeUpdate(sql.formatted(inSql), request.getContestEligibilityIdsList().toArray());
         responseObserver.onNext(Empty.getDefaultInstance());
         responseObserver.onCompleted();
@@ -136,7 +135,7 @@ public class ContestEligibilityService extends ContestEligibilityServiceGrpc.Con
         List<Long> result = new ArrayList<>();
         while (true) {
             int count = Math.min(100, request.getContestIdsCount() - startIndex);
-            String inSql = String.join(",", Collections.nCopies(count, "?"));
+            String inSql = Helper.getInClause(count);
             List<Object> param = new ArrayList<>();
             param.add(studio);
             param.addAll(request.getContestIdsList().stream().skip(startIndex).limit(count).toList());
@@ -185,7 +184,7 @@ public class ContestEligibilityService extends ContestEligibilityServiceGrpc.Con
     }
 
     private void validateBulkRemoveRequest(BulkRemoveRequest request) {
-        Helper.assertObjectNotNull(() -> !request.getContestEligibilityIdsList().isEmpty(), "contestEligibilityId");
+        Helper.assertObjectNotEmpty(request::getContestEligibilityIdsCount, "contestEligibilityId");
     }
 
     private void validateUpdateRequest(UpdateRequest request) {
@@ -201,7 +200,7 @@ public class ContestEligibilityService extends ContestEligibilityServiceGrpc.Con
 
     private void validateHaveEligibilityRequest(HaveEligibilityRequest request) {
         Helper.assertObjectNotNull(request::hasStudio, "studio");
-        Helper.assertObjectNotNull(() -> !request.getContestIdsList().isEmpty(), "contestId");
+        Helper.assertObjectNotEmpty(request::getContestIdsCount, "contestId");
     }
 
     private void validateValidateUserContestEligibilityRequest(ValidateUserContestEligibilityRequest request) {
