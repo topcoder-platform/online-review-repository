@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import javax.annotation.Nullable;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 
 @Component
 public class DBAccessor {
@@ -47,5 +48,18 @@ public class DBAccessor {
     public int executeUpdate(String query, @Nullable Object... args) throws DataAccessException {
         logger.info("executeUpdate: " + query + " with params: " + Arrays.toString(args));
         return jdbcTemplate.update(query, args);
+    }
+
+    /**
+     * Execute update operation.
+     *
+     * @param query The query clause
+     * @param args  The parameters to bind to query, may be null
+     * @return the result map list
+     * @throws DataAccessException exception
+     */
+    public List<Map<String, Object>> executeQuery(String query, @Nullable Object... args) {
+        logger.info("executeUpdate: " + query + " with params: " + Arrays.toString(args));
+        return jdbcTemplate.queryForList(query, args);
     }
 }
