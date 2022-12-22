@@ -8,6 +8,7 @@ import com.topcoder.onlinereview.component.search.filter.Filter;
 import com.topcoder.or.util.DBAccessor;
 import com.topcoder.or.util.Helper;
 import com.topcoder.or.util.ResultSetHelper;
+import com.topcoder.or.util.SearchBundleHelper;
 
 import io.grpc.stub.StreamObserver;
 import net.devh.boot.grpc.server.service.GrpcService;
@@ -53,10 +54,10 @@ public class DeliverableService extends DeliverableServiceGrpc.DeliverableServic
                 .getSearchBundle(DELIVERABLE_WITH_SUBMISSIONS_SEARCH_BUNDLE_NAME);
         nonRestrictedSearchBundle = searchBundleManager.getSearchBundle(KEY_NON_RESTRICTED_SB_NAME);
         restrictedSearchBundle = searchBundleManager.getSearchBundle(KEY_RESTRICTED_SB_NAME);
-        Helper.setSearchableFields(
-                deliverableSearchBundle, Helper.DELIVERABLE_SEARCH_BUNDLE);
-        Helper.setSearchableFields(deliverableWithSubmissionsSearchBundle,
-                Helper.DELIVERABLE_WITH_SUBMISSIONS_SEARCH_BUNDLE);
+        SearchBundleHelper.setSearchableFields(
+                deliverableSearchBundle, SearchBundleHelper.DELIVERABLE_SEARCH_BUNDLE);
+        SearchBundleHelper.setSearchableFields(deliverableWithSubmissionsSearchBundle,
+                SearchBundleHelper.DELIVERABLE_WITH_SUBMISSIONS_SEARCH_BUNDLE);
     }
 
     @Override

@@ -17,6 +17,7 @@ import com.topcoder.onlinereview.component.search.filter.Filter;
 import com.topcoder.or.util.DBAccessor;
 import com.topcoder.or.util.Helper;
 import com.topcoder.or.util.ResultSetHelper;
+import com.topcoder.or.util.SearchBundleHelper;
 
 import io.grpc.stub.StreamObserver;
 import net.devh.boot.grpc.server.service.GrpcService;
@@ -41,8 +42,8 @@ public class UploadService extends UploadServiceGrpc.UploadServiceImplBase {
     public void postRun() {
         uploadSearchBundle = searchBundleManager.getSearchBundle(UPLOAD_SEARCH_BUNDLE_NAME);
         submissionSearchBundle = searchBundleManager.getSearchBundle(SUBMISSION_SEARCH_BUNDLE_NAME);
-        Helper.setSearchableFields(uploadSearchBundle, Helper.UPLOAD_SEARCH_BUNDLE);
-        Helper.setSearchableFields(submissionSearchBundle, Helper.SUBMISSION_SEARCH_BUNDLE);
+        SearchBundleHelper.setSearchableFields(uploadSearchBundle, SearchBundleHelper.UPLOAD_SEARCH_BUNDLE);
+        SearchBundleHelper.setSearchableFields(submissionSearchBundle, SearchBundleHelper.SUBMISSION_SEARCH_BUNDLE);
     }
 
     @Override

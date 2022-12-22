@@ -9,14 +9,20 @@ import java.util.stream.Collectors;
 
 import javax.annotation.PostConstruct;
 
+import org.springframework.util.SerializationUtils;
+
 import com.google.protobuf.Empty;
 import com.google.protobuf.Timestamp;
 import com.topcoder.onlinereview.component.id.DBHelper;
 import com.topcoder.onlinereview.component.id.IDGenerator;
+import com.topcoder.onlinereview.component.search.SearchBundle;
+import com.topcoder.onlinereview.component.search.SearchBundleManager;
+import com.topcoder.onlinereview.component.search.filter.Filter;
 import com.topcoder.onlinereview.grpc.project.proto.*;
 import com.topcoder.or.util.DBAccessor;
 import com.topcoder.or.util.Helper;
 import com.topcoder.or.util.ResultSetHelper;
+import com.topcoder.or.util.SearchBundleHelper;
 
 import io.grpc.stub.StreamObserver;
 import net.devh.boot.grpc.server.service.GrpcService;
@@ -25,7 +31,14 @@ import net.devh.boot.grpc.server.service.GrpcService;
 public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
     private final DBAccessor dbAccessor;
     private final DBHelper dbHelper;
+    private final SearchBundleManager searchBundleManager;
 
+    private static final String PROJECT_SEARCH_BUNDLE = "ProjectSearchBundle";
+    private static final int AUDIT_CREATE_TYPE = 1;
+    private static final int AUDIT_DELETE_TYPE = 2;
+    private static final int AUDIT_UPDATE_TYPE = 3;
+
+    private SearchBundle searchBundle;
     private IDGenerator projectIdGenerator;
     private IDGenerator projectAuditIdGenerator;
     private IDGenerator fileTypeIdGenerator;
@@ -38,22 +51,230 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
     private String prizeIdSeqName = "prize_id_seq";
     private String studioSpecIdSeqName = "studio_spec_id_seq";
 
-    private static final int AUDIT_CREATE_TYPE = 1;
-    private static final int AUDIT_DELETE_TYPE = 2;
-    private static final int AUDIT_UPDATE_TYPE = 3;
-
-    public ProjectService(DBAccessor dbAccessor, DBHelper dbHelper) {
+    public ProjectService(DBAccessor dbAccessor, DBHelper dbHelper, SearchBundleManager searchBundleManager) {
         this.dbAccessor = dbAccessor;
         this.dbHelper = dbHelper;
+        this.searchBundleManager = searchBundleManager;
     }
 
     @PostConstruct
     public void postRun() {
+        searchBundle = searchBundleManager.getSearchBundle(PROJECT_SEARCH_BUNDLE);
         projectIdGenerator = new IDGenerator(projectIdSeqName, dbHelper);
         projectAuditIdGenerator = new IDGenerator(projectAuditIdSeqName, dbHelper);
         fileTypeIdGenerator = new IDGenerator(fileTypeIdSeqName, dbHelper);
         prizeIdGenerator = new IDGenerator(prizeIdSeqName, dbHelper);
         studioSpecIdGenerator = new IDGenerator(studioSpecIdSeqName, dbHelper);
+        SearchBundleHelper.setSearchableFields(searchBundle, SearchBundleHelper.PROJECT_SEARCH_BUNDLE);
+    }
+
+    @Override
+    public void getProjects(GetProjectsRequest request, StreamObserver<GetProjectsResponse> responseObserver) {
+        validateGetProjectsRequest(request);
+        List<ProjectProto.Builder> projects = getProjects(request.getProjectIdsList());
+        List<ProjectPropertyProto> properties = getProjectsProperties(request.getProjectIdsList());
+        Map<Long, List<ProjectPropertyProto>> propertyListMap = new HashMap<>();
+        for (ProjectPropertyProto property : properties) {
+            if (propertyListMap.containsKey(property.getProjectId())) {
+                propertyListMap.get(property.getProjectId()).add(property);
+            } else {
+                propertyListMap.put(property.getProjectId(), new ArrayList<>() {
+                    {
+                        add(property);
+                    }
+                });
+            }
+        }
+        List<ProjectProto> results = new ArrayList<>(projects.size());
+        for (ProjectProto.Builder p : projects) {
+            p.addAllFileTypes(getProjectFileTypes(p.getId()));
+            p.addAllPrizes(getProjectPrizes(p.getId()));
+            GetProjectStudioSpecResponse spec = getProjectStudioSpec(p.getId());
+            if (spec.hasProjectStudioSpec()) {
+                p.setProjectStudioSpec(spec.getProjectStudioSpec());
+            }
+            if (propertyListMap.containsKey(p.getId())) {
+                p.addAllProperties(propertyListMap.get(p.getId()));
+            }
+            results.add(p.build());
+        }
+        responseObserver.onNext(GetProjectsResponse.newBuilder().addAllProjects(results).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void countUserProjects(CountUserProjectsRequest request,
+            StreamObserver<CountUserProjectsResponse> responseObserver) {
+        validateCountUserProjectsRequest(request);
+        String sql = """
+                SELECT count(p.project_id) as p_count, p.project_category_id, cat.name as cat_name, typ.project_type_id, typ.name as type_name
+                FROM project p
+                LEFT JOIN project_category_lu cat ON cat.project_category_id = p.project_category_id
+                LEFT JOIN project_type_lu typ ON typ.project_type_id = cat.project_type_id
+                WHERE p.project_status_id = ?
+                    """;
+        List<Object> argsList = new ArrayList<>();
+        argsList.add(request.getProjectStatusId());
+        if (request.hasUserId()) {
+            if (request.getIsMyProjects()) {
+                sql = sql + " and EXISTS (SELECT 1 FROM resource r WHERE r.project_id=p.project_id and r.user_id = ?)";
+                argsList.add(request.getUserId());
+            } else if (!request.getHasManagerRole()) {
+                sql = sql
+                        + " and (EXISTS (SELECT 1 FROM resource r WHERE r.project_id=p.project_id and r.user_id = ?) or not EXISTS (SELECT 1 FROM contest_eligibility WHERE is_studio = 0 and contest_id=p.project_id))";
+                argsList.add(request.getUserId());
+            }
+        } else {
+            sql = sql
+                    + " and not EXISTS (SELECT 1 FROM contest_eligibility WHERE is_studio = 0 and contest_id=p.project_id)";
+        }
+        sql = sql
+                + " GROUP BY p.project_category_id, cat.name, typ.project_type_id, typ.name ORDER BY typ.name, cat.name";
+        List<Map<String, Object>> rows = dbAccessor.executeQuery(sql, argsList.toArray());
+        List<UserProjectTypeProto> projectTypes = new ArrayList<>();
+        Map<Long, UserProjectTypeProto.Builder> map = new HashMap<>();
+        for (int i = 0; i < rows.size(); ++i) {
+            Map<String, Object> row = rows.get(i);
+            long projectTypeId = Long.valueOf(row.get("project_type_id").toString());
+            String projectTypeName = row.get("type_name").toString();
+            long projectCategoryId = Long.valueOf(row.get("project_category_id").toString());
+            String projectCategoryName = row.get("cat_name").toString();
+            int count = Integer.valueOf(row.get("p_count").toString());
+            UserProjectTypeProto.Builder pt = map.get(projectTypeId);
+            if (pt == null) {
+                pt = UserProjectTypeProto.newBuilder().setId(projectTypeId).setName(projectTypeName);
+                map.put(projectTypeId, pt);
+            }
+            pt.addCategories(UserProjectCategoryProto.newBuilder().setId(projectCategoryId).setName(projectCategoryName)
+                    .setCount(count).build());
+            pt.setCount(pt.getCount() + count);
+        }
+        for (UserProjectTypeProto.Builder b : map.values()) {
+            projectTypes.add(b.build());
+        }
+        responseObserver.onNext(CountUserProjectsResponse.newBuilder().addAllUserProjectTypes(projectTypes).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void getAllProjects(GetAllProjectsRequest request, StreamObserver<GetAllProjectsResponse> responseObserver) {
+        validateGetAllProjectsRequest(request);
+        String sql = """
+                SELECT SKIP ? FIRST ? p.project_id,
+                (SELECT pi.value FROM project_info pi WHERE pi.project_id=p.project_id and pi.project_info_type_id=6) as project_name,
+                (SELECT pi.value FROM project_info pi WHERE pi.project_id=p.project_id and pi.project_info_type_id=7) as project_version,
+                (SELECT pi.value FROM project_info pi WHERE pi.project_id=p.project_id and pi.project_info_type_id=5) as root_catalog_id,
+                (SELECT pi.value FROM project_info pi WHERE pi.project_id=p.project_id and pi.project_info_type_id=23) as winner_reference_id
+                FROM project p
+                WHERE p.project_status_id = ? and p.project_category_id = ?
+                """;
+        List<Object> argsList = new ArrayList<>();
+        argsList.add((request.getPage() - 1) * request.getPerPage());
+        argsList.add(request.getPerPage());
+        argsList.add(request.getProjectStatusId());
+        argsList.add(request.getCategoryId());
+        if (request.hasUserId()) {
+            if (request.getIsMyProjects()) {
+                sql = sql + " and EXISTS (SELECT 1 FROM resource r WHERE r.project_id=p.project_id and r.user_id = ?)";
+                argsList.add(request.getUserId());
+            } else if (!request.getHasManagerRole()) {
+                sql = sql
+                        + " and (EXISTS (SELECT 1 FROM resource r WHERE r.project_id=p.project_id and r.user_id = ?) or not EXISTS (SELECT 1 FROM contest_eligibility WHERE is_studio = 0 and contest_id=p.project_id))";
+                argsList.add(request.getUserId());
+            }
+        } else {
+            sql = sql
+                    + " and not EXISTS (SELECT 1 FROM contest_eligibility WHERE is_studio = 0 and contest_id=p.project_id)";
+        }
+        sql = sql
+                + " ORDER BY p.project_id DESC";
+        List<ProjectProto> result = dbAccessor.executeQuery(sql, (rs, _i) -> {
+            ProjectProto.Builder builder = ProjectProto.newBuilder();
+            ResultSetHelper.applyResultSetLong(rs, 1, builder::setId);
+            ProjectPropertyProto.Builder pBuilder = ProjectPropertyProto.newBuilder();
+            pBuilder.setName("Project Name");
+            ResultSetHelper.applyResultSetString(rs, 2, pBuilder::setValue);
+            builder.addProperties(pBuilder.build());
+            pBuilder.setName("Project Version");
+            ResultSetHelper.applyResultSetString(rs, 3, pBuilder::setValue);
+            builder.addProperties(pBuilder.build());
+            pBuilder.setName("Root Catalog ID");
+            ResultSetHelper.applyResultSetString(rs, 4, pBuilder::setValue);
+            builder.addProperties(pBuilder.build());
+            pBuilder.setName("Winner External Reference ID");
+            ResultSetHelper.applyResultSetString(rs, 5, pBuilder::setValue);
+            builder.addProperties(pBuilder.build());
+            return builder.build();
+        }, argsList.toArray());
+        responseObserver.onNext(GetAllProjectsResponse.newBuilder().addAllProjects(result).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void searchProjectsForAutopilot(Empty request, StreamObserver<IdListProto> responseObserver) {
+        String sql = """
+                SELECT project.project_id
+                FROM project
+                WHERE project.project_status_id=1 AND EXISTS
+                (SELECT 1 FROM project_info
+                WHERE project_info.project_id=project.project_id AND
+                project_info.project_info_type_id = 9 AND
+                project_info.value = 'On')
+                        """;
+        List<Long> result = dbAccessor.executeQuery(sql, (rs, _i) -> {
+            return rs.getLong(1);
+        });
+        responseObserver.onNext(IdListProto.newBuilder().addAllIds(result).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void searchProjects(FilterProto request, StreamObserver<SearchProjectsResponse> responseObserver) {
+        Filter filter = (Filter) SerializationUtils.deserialize(request.getFilter().toByteArray());
+        List<ProjectProto.Builder> projects = searchBundle.search(filter, (rs, _i) -> {
+            ProjectProto.Builder builder = ProjectProto.newBuilder();
+            ResultSetHelper.applyResultSetLong(rs, "project_id", builder::setId);
+            ProjectStatusProto.Builder psBuilder = ProjectStatusProto.newBuilder();
+            ResultSetHelper.applyResultSetLong(rs, "project_status_id", psBuilder::setId);
+            ResultSetHelper.applyResultSetString(rs, "project_status_name", psBuilder::setName);
+            builder.setProjectStatus(psBuilder.build());
+            ProjectCategoryProto.Builder pcBuilder = ProjectCategoryProto.newBuilder();
+            ResultSetHelper.applyResultSetLong(rs, "project_category_id", pcBuilder::setId);
+            ResultSetHelper.applyResultSetString(rs, "project_category_name", pcBuilder::setName);
+            ProjectTypeProto.Builder ptBuilder = ProjectTypeProto.newBuilder();
+            ResultSetHelper.applyResultSetLong(rs, "project_type_id", ptBuilder::setId);
+            ResultSetHelper.applyResultSetString(rs, "project_type_name", ptBuilder::setName);
+            pcBuilder.setProjectType(ptBuilder.build());
+            builder.setProjectCategory(pcBuilder.build());
+            ResultSetHelper.applyResultSetString(rs, "create_user", builder::setCreateUser);
+            ResultSetHelper.applyResultSetTimestamp(rs, "create_date", builder::setCreateDate);
+            ResultSetHelper.applyResultSetString(rs, "modify_user", builder::setModifyUser);
+            ResultSetHelper.applyResultSetTimestamp(rs, "modify_date", builder::setModifyDate);
+            return builder;
+        });
+        List<Long> projectIds = projects.stream().map(x -> x.getId()).collect(Collectors.toList());
+        List<ProjectPropertyProto> properties = getProjectsProperties(projectIds);
+        Map<Long, List<ProjectPropertyProto>> propertyListMap = new HashMap<>();
+        for (ProjectPropertyProto property : properties) {
+            if (propertyListMap.containsKey(property.getProjectId())) {
+                propertyListMap.get(property.getProjectId()).add(property);
+            } else {
+                propertyListMap.put(property.getProjectId(), new ArrayList<>() {
+                    {
+                        add(property);
+                    }
+                });
+            }
+        }
+        List<ProjectProto> results = new ArrayList<>(projects.size());
+        for (ProjectProto.Builder p : projects) {
+            if (propertyListMap.containsKey(p.getId())) {
+                p.addAllProperties(propertyListMap.get(p.getId()));
+            }
+            results.add(p.build());
+        }
+        responseObserver.onNext(SearchProjectsResponse.newBuilder().addAllProjects(results).build());
+        responseObserver.onCompleted();
     }
 
     @Override
@@ -69,6 +290,7 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
                     propertyTypeNameIdMap);
         }
         if (request.getProject().getFileTypesCount() > 0) {
+            pBuilder.clearFileTypes();
             pBuilder.addAllFileTypes(
                     createProjectFileTypes(pBuilder.getId(), request.getProject().getFileTypesList(),
                             request.getOperator()));
@@ -93,18 +315,19 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
             propertyTypeNameIdMap = makePropertyNamePropertyIdMap(getAllProjectPropertyTypes());
         }
         validateUpdateProjectRequest(request, propertyTypeNameIdMap);
-        ProjectProto.Builder pBuilder = updateProject(request.getProject(), request.getReason(),
-                request.getOperator());
+        ProjectProto.Builder pBuilder = updateProject(request.getProject(), request.getReason(), request.getOperator());
         if (request.getProject().getPropertiesCount() > 0) {
             updateProjectProperties(pBuilder.getId(), request.getOperator(), request.getProject().getPropertiesList(),
                     propertyTypeNameIdMap);
         }
         if (request.getProject().getFileTypesCount() > 0) {
+            pBuilder.clearFileTypes();
             pBuilder.addAllFileTypes(
                     updateProjectFileTypes(pBuilder.getId(), request.getProject().getFileTypesList(),
                             request.getOperator()));
         }
         if (request.getProject().getPrizesCount() > 0) {
+            pBuilder.clearPrizes();
             pBuilder.addAllPrizes(
                     updateProjectPrizes(pBuilder.getId(), request.getProject().getPrizesList(), request.getOperator()));
         }
@@ -139,25 +362,6 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
         responseObserver.onCompleted();
     }
 
-    private List<FileTypeProto> getProjectFileTypes(long projectId) {
-        String sql = """
-                SELECT type.file_type_id, type.description, type.sort, type.image_file, type.extension, type.bundled_file
-                FROM file_type_lu AS type
-                JOIN project_file_type_xref AS xref ON type.file_type_id=xref.file_type_id
-                WHERE xref.project_id = ?
-                """;
-        return dbAccessor.executeQuery(sql, (rs, _i) -> {
-            FileTypeProto.Builder builder = FileTypeProto.newBuilder();
-            ResultSetHelper.applyResultSetLong(rs, 1, builder::setId);
-            ResultSetHelper.applyResultSetString(rs, 2, builder::setDescription);
-            ResultSetHelper.applyResultSetInt(rs, 3, builder::setSort);
-            ResultSetHelper.applyResultSetBool(rs, 4, builder::setImageFile);
-            ResultSetHelper.applyResultSetString(rs, 5, builder::setExtension);
-            ResultSetHelper.applyResultSetBool(rs, 6, builder::setBundledFile);
-            return builder.build();
-        }, projectId);
-    }
-
     @Override
     public void updateProjectFileTypes(UpdateProjectFileTypesRequest request,
             StreamObserver<UpdateProjectFileTypesResponse> responseObserver) {
@@ -172,33 +376,9 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
     @Override
     public void getProjectPrizes(ProjectIdProto request, StreamObserver<GetProjectPrizesResponse> responseObserver) {
         validateProjectIdProto(request);
-
         List<PrizeProto> result = getProjectPrizes(request.getProjectId());
         responseObserver.onNext(GetProjectPrizesResponse.newBuilder().addAllPrizes(result).build());
         responseObserver.onCompleted();
-    }
-
-    private List<PrizeProto> getProjectPrizes(long projectId) {
-        String sql = """
-                SELECT prize.prize_id, prize.place, prize.prize_amount, prize.number_of_submissions, prize_type.prize_type_id, prize_type.prize_type_desc
-                FROM prize AS prize
-                JOIN prize_type_lu AS prize_type ON prize.prize_type_id=prize_type.prize_type_id
-                WHERE prize.project_id = ?
-                """;
-        return dbAccessor.executeQuery(sql, (rs, _i) -> {
-            PrizeProto.Builder builder = PrizeProto.newBuilder();
-            ResultSetHelper.applyResultSetLong(rs, 1, builder::setId);
-            ResultSetHelper.applyResultSetInt(rs, 2, builder::setPlace);
-            ResultSetHelper.applyResultSetInt(rs, 3, builder::setPrizeAmount);
-            ResultSetHelper.applyResultSetInt(rs, 4, builder::setNumberOfSubmissions);
-            PrizeTypeProto.Builder ptBuilder = PrizeTypeProto.newBuilder();
-            ResultSetHelper.applyResultSetLong(rs, 5, ptBuilder::setId);
-            ResultSetHelper.applyResultSetString(rs, 6, ptBuilder::setDescription);
-            if (ptBuilder.hasId()) {
-                builder.setPrizeType(ptBuilder.build());
-            }
-            return builder.build();
-        }, projectId);
     }
 
     @Override
@@ -213,6 +393,24 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
     }
 
     @Override
+    public void getProjectStudioSpec(ProjectIdProto request,
+            StreamObserver<GetProjectStudioSpecResponse> responseObserver) {
+        validateProjectIdProto(request);
+        responseObserver.onNext(getProjectStudioSpec(request.getProjectId()));
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void updateProjectStudioSpec(UpdateProjectStudioSpecRequest request,
+            StreamObserver<ProjectStudioSpecProto> responseObserver) {
+        validateUpdateProjectStudioSpecRequest(request);
+        ProjectStudioSpecProto spec = updateProjectStudioSpec(request.getProjectId(), request.getProjectStudioSpec(),
+                request.getOperator());
+        responseObserver.onNext(spec);
+        responseObserver.onCompleted();
+    }
+
+    @Override
     public void createFileType(CreateFileTypeRequest request, StreamObserver<FileTypeProto> responseObserver) {
         validateCreateFileTypeRequest(request);
         FileTypeProto fileType = createFileType(request.getFileType(), request.getOperator());
@@ -223,53 +421,8 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
     @Override
     public void updateFileType(UpdateFileTypeRequest request, StreamObserver<FileTypeProto> responseObserver) {
         validateUpdateFileTypeRequest(request);
-        Date now = new Date();
-        Timestamp nowTs = Timestamp.newBuilder().setSeconds(now.toInstant().getEpochSecond()).build();
-        String sql = """
-                UPDATE file_type_lu SET description=?, sort=?, image_file=?, extension=?, bundled_file=?, modify_user=?, modify_date=?
-                WHERE file_type_id = ?
-                """;
-        FileTypeProto fileType = request.getFileType();
-        dbAccessor.executeUpdate(sql, fileType.getDescription(), fileType.getSort(),
-                fileType.getImageFile(), fileType.getExtension(), fileType.getBundledFile(), request.getOperator(),
-                now, fileType.getId());
-        fileType = FileTypeProto.newBuilder(fileType).setModifyUser(request.getOperator()).setModifyDate(nowTs)
-                .build();
+        FileTypeProto fileType = updateFileType(request.getFileType(), request.getOperator());
         responseObserver.onNext(fileType);
-        responseObserver.onCompleted();
-    }
-
-    @Override
-    public void getAllFileTypes(Empty request, StreamObserver<GetAllFileTypesResponse> responseObserver) {
-        String sql = """
-                SELECT file_type_id, description, sort, image_file, extension, bundled_file FROM file_type_lu
-                """;
-        List<FileTypeProto> fileTypes = dbAccessor.executeQuery(sql, (rs, _id) -> {
-            FileTypeProto.Builder builder = FileTypeProto.newBuilder();
-            ResultSetHelper.applyResultSetLong(rs, 1, builder::setId);
-            ResultSetHelper.applyResultSetString(rs, 2, builder::setDescription);
-            ResultSetHelper.applyResultSetInt(rs, 3, builder::setSort);
-            ResultSetHelper.applyResultSetBool(rs, 4, builder::setImageFile);
-            ResultSetHelper.applyResultSetString(rs, 5, builder::setExtension);
-            ResultSetHelper.applyResultSetBool(rs, 6, builder::setBundledFile);
-            return builder.build();
-        });
-        responseObserver.onNext(GetAllFileTypesResponse.newBuilder().addAllFileTypes(fileTypes).build());
-        responseObserver.onCompleted();
-    }
-
-    @Override
-    public void getAllPrizeTypes(Empty request, StreamObserver<GetAllPrizeTypesResponse> responseObserver) {
-        String sql = """
-                SELECT prize_type_id, prize_type_desc FROM prize_type_lu
-                """;
-        List<PrizeTypeProto> prizeTypes = dbAccessor.executeQuery(sql, (rs, _id) -> {
-            PrizeTypeProto.Builder builder = PrizeTypeProto.newBuilder();
-            ResultSetHelper.applyResultSetLong(rs, 1, builder::setId);
-            ResultSetHelper.applyResultSetString(rs, 2, builder::setDescription);
-            return builder.build();
-        });
-        responseObserver.onNext(GetAllPrizeTypesResponse.newBuilder().addAllPrizeTypes(prizeTypes).build());
         responseObserver.onCompleted();
     }
 
@@ -305,10 +458,7 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
         validateDeletePrizeRequest(request);
         List<Long> projectIds = getProjectIdsByPrizeId(request.getPrizeId());
         auditProjects(projectIds, "Removes the project prize", request.getOperator());
-        String sql = """
-                DELETE FROM prize WHERE prize_id = ?
-                """;
-        int affected = dbAccessor.executeUpdate(sql, request.getPrizeId());
+        int affected = deletePrize(request.getPrizeId());
         responseObserver.onNext(CountProto.newBuilder().setCount(affected).build());
         responseObserver.onCompleted();
     }
@@ -337,62 +487,8 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
         List<Long> projectIds = getProjectIdsByStudioSpecId(request.getProjectStudioSpecId());
         auditProjects(projectIds, "Removes the project studio specification", request.getOperator());
         removeStudioSpecFromProjects(request.getProjectStudioSpecId());
-        String sql = """
-                DELETE FROM project_studio_specification WHERE project_studio_spec_id = ?
-                """;
-        int affected = dbAccessor.executeUpdate(sql, request.getProjectStudioSpecId());
+        int affected = deleteStudioSpec(request.getProjectStudioSpecId());
         responseObserver.onNext(CountProto.newBuilder().setCount(affected).build());
-        responseObserver.onCompleted();
-    }
-
-    @Override
-    public void getProjectStudioSpec(ProjectIdProto request,
-            StreamObserver<GetProjectStudioSpecResponse> responseObserver) {
-        validateProjectIdProto(request);
-        responseObserver.onNext(getProjectStudioSpec(request.getProjectId()));
-        responseObserver.onCompleted();
-    }
-
-    private GetProjectStudioSpecResponse getProjectStudioSpec(long projectId) {
-        String sql = """
-                SELECT spec.project_studio_spec_id, spec.goals, spec.target_audience, spec.branding_guidelines, spec.disliked_design_websites,
-                spec.other_instructions, spec.winning_criteria, spec.submitters_locked_between_rounds, spec.round_one_introduction,
-                spec.round_two_introduction, spec.colors, spec.fonts, spec.layout_and_size
-                FROM project_studio_specification AS spec
-                JOIN project AS project ON project.project_studio_spec_id=spec.project_studio_spec_id
-                WHERE project.project_id = ?
-                """;
-        List<ProjectStudioSpecProto> result = dbAccessor.executeQuery(sql, (rs, _i) -> {
-            ProjectStudioSpecProto.Builder builder = ProjectStudioSpecProto.newBuilder();
-            ResultSetHelper.applyResultSetLong(rs, 1, builder::setId);
-            ResultSetHelper.applyResultSetString(rs, 2, builder::setGoals);
-            ResultSetHelper.applyResultSetString(rs, 3, builder::setTargetAudience);
-            ResultSetHelper.applyResultSetString(rs, 4, builder::setBrandingGuidelines);
-            ResultSetHelper.applyResultSetString(rs, 5, builder::setDislikedDesignWebsites);
-            ResultSetHelper.applyResultSetString(rs, 6, builder::setOtherInstructions);
-            ResultSetHelper.applyResultSetString(rs, 7, builder::setWinningCriteria);
-            ResultSetHelper.applyResultSetBool(rs, 8, builder::setSubmittersLockedBetweenRounds);
-            ResultSetHelper.applyResultSetString(rs, 9, builder::setRoundOneIntroduction);
-            ResultSetHelper.applyResultSetString(rs, 10, builder::setRoundTwoIntroduction);
-            ResultSetHelper.applyResultSetString(rs, 11, builder::setColors);
-            ResultSetHelper.applyResultSetString(rs, 12, builder::setFonts);
-            ResultSetHelper.applyResultSetString(rs, 13, builder::setLayoutAndSize);
-            return builder.build();
-        }, projectId);
-        if (result.isEmpty()) {
-            return GetProjectStudioSpecResponse.getDefaultInstance();
-        } else {
-            return GetProjectStudioSpecResponse.newBuilder().setProjectStudioSpec(result.get(0)).build();
-        }
-    }
-
-    @Override
-    public void updateProjectStudioSpec(UpdateProjectStudioSpecRequest request,
-            StreamObserver<ProjectStudioSpecProto> responseObserver) {
-        validateUpdateProjectStudioSpecRequest(request);
-        ProjectStudioSpecProto spec = updateProjectStudioSpec(request.getProjectId(), request.getProjectStudioSpec(),
-                request.getOperator());
-        responseObserver.onNext(spec);
         responseObserver.onCompleted();
     }
 
@@ -464,37 +560,36 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
     }
 
     @Override
-    public void getProjects(GetProjectsRequest request, StreamObserver<GetProjectsResponse> responseObserver) {
-        validateGetProjectsRequest(request);
+    public void getAllFileTypes(Empty request, StreamObserver<GetAllFileTypesResponse> responseObserver) {
+        String sql = """
+                SELECT file_type_id, description, sort, image_file, extension, bundled_file FROM file_type_lu
+                """;
+        List<FileTypeProto> fileTypes = dbAccessor.executeQuery(sql, (rs, _id) -> {
+            FileTypeProto.Builder builder = FileTypeProto.newBuilder();
+            ResultSetHelper.applyResultSetLong(rs, 1, builder::setId);
+            ResultSetHelper.applyResultSetString(rs, 2, builder::setDescription);
+            ResultSetHelper.applyResultSetInt(rs, 3, builder::setSort);
+            ResultSetHelper.applyResultSetBool(rs, 4, builder::setImageFile);
+            ResultSetHelper.applyResultSetString(rs, 5, builder::setExtension);
+            ResultSetHelper.applyResultSetBool(rs, 6, builder::setBundledFile);
+            return builder.build();
+        });
+        responseObserver.onNext(GetAllFileTypesResponse.newBuilder().addAllFileTypes(fileTypes).build());
+        responseObserver.onCompleted();
+    }
 
-        List<ProjectProto.Builder> projects = getProjects(request.getProjectIdsList());
-        List<ProjectPropertyProto> properties = getProjectsProperties(request.getProjectIdsList());
-        Map<Long, List<ProjectPropertyProto>> propertyListMap = new HashMap<>();
-        for (ProjectPropertyProto property : properties) {
-            if (propertyListMap.containsKey(property.getProjectId())) {
-                propertyListMap.get(property.getProjectId()).add(property);
-            } else {
-                propertyListMap.put(property.getProjectId(), new ArrayList<>() {
-                    {
-                        add(property);
-                    }
-                });
-            }
-        }
-        List<ProjectProto> results = new ArrayList<>(projects.size());
-        for (ProjectProto.Builder p : projects) {
-            p.addAllFileTypes(getProjectFileTypes(p.getId()));
-            p.addAllPrizes(getProjectPrizes(p.getId()));
-            GetProjectStudioSpecResponse spec = getProjectStudioSpec(p.getId());
-            if (spec.hasProjectStudioSpec()) {
-                p.setProjectStudioSpec(spec.getProjectStudioSpec());
-            }
-            if (propertyListMap.containsKey(p.getId())) {
-                p.addAllProperties(propertyListMap.get(p.getId()));
-            }
-            results.add(p.build());
-        }
-        responseObserver.onNext(GetProjectsResponse.newBuilder().addAllProjects(results).build());
+    @Override
+    public void getAllPrizeTypes(Empty request, StreamObserver<GetAllPrizeTypesResponse> responseObserver) {
+        String sql = """
+                SELECT prize_type_id, prize_type_desc FROM prize_type_lu
+                """;
+        List<PrizeTypeProto> prizeTypes = dbAccessor.executeQuery(sql, (rs, _id) -> {
+            PrizeTypeProto.Builder builder = PrizeTypeProto.newBuilder();
+            ResultSetHelper.applyResultSetLong(rs, 1, builder::setId);
+            ResultSetHelper.applyResultSetString(rs, 2, builder::setDescription);
+            return builder.build();
+        });
+        responseObserver.onNext(GetAllPrizeTypesResponse.newBuilder().addAllPrizeTypes(prizeTypes).build());
         responseObserver.onCompleted();
     }
 
@@ -537,23 +632,6 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
         }, projectIds.toArray());
     }
 
-    private List<ProjectPropertyProto> getProjectsProperties(List<Long> projectIds) {
-        String sql = """
-                SELECT info.project_id, info_type.name, info.value
-                FROM project_info AS info
-                JOIN project_info_type_lu AS info_type ON info.project_info_type_id=info_type.project_info_type_id
-                WHERE info.project_id IN (%s)
-                """;
-        String inSql = Helper.getInClause(projectIds.size());
-        return dbAccessor.executeQuery(sql.formatted(inSql), (rs, _i) -> {
-            ProjectPropertyProto.Builder builder = ProjectPropertyProto.newBuilder();
-            ResultSetHelper.applyResultSetLong(rs, 1, builder::setProjectId);
-            ResultSetHelper.applyResultSetString(rs, 2, builder::setName);
-            ResultSetHelper.applyResultSetString(rs, 3, builder::setValue);
-            return builder.build();
-        }, projectIds.toArray());
-    }
-
     private ProjectProto.Builder createProject(ProjectProto project, String operator) {
         Long newId = projectIdGenerator.getNextID();
         Date now = new Date();
@@ -583,11 +661,26 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
         return ProjectProto.newBuilder(project).setModifyUser(operator).setModifyDate(nowTs);
     }
 
+    /* #region project properties */
+    private List<ProjectPropertyProto> getProjectsProperties(List<Long> projectIds) {
+        String sql = """
+                SELECT info.project_id, info_type.name, info.value
+                FROM project_info AS info
+                JOIN project_info_type_lu AS info_type ON info.project_info_type_id=info_type.project_info_type_id
+                WHERE info.project_id IN (%s)
+                """;
+        String inSql = Helper.getInClause(projectIds.size());
+        return dbAccessor.executeQuery(sql.formatted(inSql), (rs, _i) -> {
+            ProjectPropertyProto.Builder builder = ProjectPropertyProto.newBuilder();
+            ResultSetHelper.applyResultSetLong(rs, 1, builder::setProjectId);
+            ResultSetHelper.applyResultSetString(rs, 2, builder::setName);
+            ResultSetHelper.applyResultSetString(rs, 3, builder::setValue);
+            return builder.build();
+        }, projectIds.toArray());
+    }
+
     private void createProjectProperties(long projectId, String operator, List<ProjectPropertyProto> properties,
             Map<String, Long> nameIdMap) {
-        if (properties.isEmpty()) {
-            return;
-        }
         for (ProjectPropertyProto property : properties) {
             createProjectProperty(projectId, operator, nameIdMap.get(property.getName()), property.getValue());
         }
@@ -664,6 +757,37 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
         }, projectId);
     }
 
+    private Map<String, Long> makePropertyNamePropertyIdMap(List<ProjectPropertyTypeProto> propertyTypes) {
+        return propertyTypes.stream()
+                .collect(Collectors.toMap(ProjectPropertyTypeProto::getName, ProjectPropertyTypeProto::getId));
+    }
+
+    private Map<Long, String> makePropertyIdPropertyValueMap(List<ProjectPropertyProto> properties) {
+        return properties.stream()
+                .collect(Collectors.toMap(ProjectPropertyProto::getId, ProjectPropertyProto::getValue));
+    }
+    /* #endregion */
+
+    /* #region file types */
+    private List<FileTypeProto> getProjectFileTypes(long projectId) {
+        String sql = """
+                SELECT type.file_type_id, type.description, type.sort, type.image_file, type.extension, type.bundled_file
+                FROM file_type_lu AS type
+                JOIN project_file_type_xref AS xref ON type.file_type_id=xref.file_type_id
+                WHERE xref.project_id = ?
+                """;
+        return dbAccessor.executeQuery(sql, (rs, _i) -> {
+            FileTypeProto.Builder builder = FileTypeProto.newBuilder();
+            ResultSetHelper.applyResultSetLong(rs, 1, builder::setId);
+            ResultSetHelper.applyResultSetString(rs, 2, builder::setDescription);
+            ResultSetHelper.applyResultSetInt(rs, 3, builder::setSort);
+            ResultSetHelper.applyResultSetBool(rs, 4, builder::setImageFile);
+            ResultSetHelper.applyResultSetString(rs, 5, builder::setExtension);
+            ResultSetHelper.applyResultSetBool(rs, 6, builder::setBundledFile);
+            return builder.build();
+        }, projectId);
+    }
+
     private List<FileTypeProto> createProjectFileTypes(long projectId, List<FileTypeProto> fileTypes,
             String operator) {
         List<FileTypeProto> newFileTypes = new ArrayList<>();
@@ -673,16 +797,39 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
                 FileTypeProto created = createFileType(fileType, operator);
                 id = created.getId();
                 newFileTypes.add(created);
+            } else {
+                newFileTypes.add(fileType);
             }
             createProjectFileType(projectId, id);
         }
         return newFileTypes;
     }
 
+    private int createProjectFileType(long projectId, long fileTypeId) {
+        String sql = """
+                INSERT INTO project_file_type_xref (project_id, file_type_id)
+                VALUES (?, ?)
+                """;
+        return dbAccessor.executeUpdate(sql, projectId, fileTypeId);
+    }
+
     private List<FileTypeProto> updateProjectFileTypes(long projectId, List<FileTypeProto> fileTypes,
             String operator) {
         deleteProjectFileTypes(projectId);
-        return createProjectFileTypes(projectId, fileTypes, operator);
+        List<FileTypeProto> newFileTypes = new ArrayList<>();
+        for (FileTypeProto fileType : fileTypes) {
+            long id = fileType.getId();
+            if (id == 0) {
+                FileTypeProto created = createFileType(fileType, operator);
+                id = created.getId();
+                newFileTypes.add(created);
+            } else {
+                FileTypeProto updated = updateFileType(fileType, operator);
+                newFileTypes.add(updated);
+            }
+            createProjectFileType(projectId, id);
+        }
+        return newFileTypes;
     }
 
     private int deleteProjectFileTypes(long projectId) {
@@ -696,14 +843,6 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
     private int deleteProjectFileTypesByTypeId(long fileTypeId) {
         String sql = """
                 DELETE FROM project_file_type_xref WHERE file_type_id = ?
-                """;
-        int affected = dbAccessor.executeUpdate(sql, fileTypeId);
-        return affected;
-    }
-
-    private int deleteFileType(long fileTypeId) {
-        String sql = """
-                DELETE FROM file_type_lu WHERE file_type_id = ?
                 """;
         int affected = dbAccessor.executeUpdate(sql, fileTypeId);
         return affected;
@@ -723,12 +862,49 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
                 .setModifyUser(operator).setModifyDate(nowTs).build();
     }
 
-    private int createProjectFileType(long projectId, long fileTypeId) {
+    private FileTypeProto updateFileType(FileTypeProto fileType, String operator) {
+        Date now = new Date();
+        Timestamp nowTs = Timestamp.newBuilder().setSeconds(now.toInstant().getEpochSecond()).build();
         String sql = """
-                INSERT INTO project_file_type_xref (project_id, file_type_id)
-                VALUES (?, ?)
+                UPDATE file_type_lu SET description=?, sort=?, image_file=?, extension=?, bundled_file=?, modify_user=?, modify_date=?
+                WHERE file_type_id = ?
                 """;
-        return dbAccessor.executeUpdate(sql, projectId, fileTypeId);
+        dbAccessor.executeUpdate(sql, fileType.getDescription(), fileType.getSort(), fileType.getImageFile(),
+                fileType.getExtension(), fileType.getBundledFile(), operator, now, fileType.getId());
+        return FileTypeProto.newBuilder(fileType).setModifyUser(operator).setModifyDate(nowTs).build();
+    }
+
+    private int deleteFileType(long fileTypeId) {
+        String sql = """
+                DELETE FROM file_type_lu WHERE file_type_id = ?
+                """;
+        int affected = dbAccessor.executeUpdate(sql, fileTypeId);
+        return affected;
+    }
+    /* #endregion */
+
+    /* #region prize */
+    private List<PrizeProto> getProjectPrizes(long projectId) {
+        String sql = """
+                SELECT prize.prize_id, prize.place, prize.prize_amount, prize.number_of_submissions, prize_type.prize_type_id, prize_type.prize_type_desc
+                FROM prize AS prize
+                JOIN prize_type_lu AS prize_type ON prize.prize_type_id=prize_type.prize_type_id
+                WHERE prize.project_id = ?
+                """;
+        return dbAccessor.executeQuery(sql, (rs, _i) -> {
+            PrizeProto.Builder builder = PrizeProto.newBuilder();
+            ResultSetHelper.applyResultSetLong(rs, 1, builder::setId);
+            ResultSetHelper.applyResultSetInt(rs, 2, builder::setPlace);
+            ResultSetHelper.applyResultSetInt(rs, 3, builder::setPrizeAmount);
+            ResultSetHelper.applyResultSetInt(rs, 4, builder::setNumberOfSubmissions);
+            PrizeTypeProto.Builder ptBuilder = PrizeTypeProto.newBuilder();
+            ResultSetHelper.applyResultSetLong(rs, 5, ptBuilder::setId);
+            ResultSetHelper.applyResultSetString(rs, 6, ptBuilder::setDescription);
+            if (ptBuilder.hasId()) {
+                builder.setPrizeType(ptBuilder.build());
+            }
+            return builder.build();
+        }, projectId);
     }
 
     private List<PrizeProto> updateProjectPrizes(long projectId, List<PrizeProto> prizes, String operator) {
@@ -770,13 +946,55 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
         Date now = new Date();
         Timestamp nowTs = Timestamp.newBuilder().setSeconds(now.toInstant().getEpochSecond()).build();
         String sql = """
-                UPDATE prize SET project_id=?, place=?, prize_amount=?, prize_type_id=?, number_of_submissions=?, modify_user=?, modify_date=?
-                WHERE prize_id = ?
+                UPDATE prize SET place=?, prize_amount=?, prize_type_id=?, number_of_submissions=?, modify_user=?, modify_date=?
+                WHERE prize_id = ? AND project_id = ?
                 """;
-        dbAccessor.executeUpdate(sql, projectId, prize.getPlace(), prize.getPrizeAmount(),
-                prize.getPrizeType().getId(), prize.getNumberOfSubmissions(), operator, now, prize.getId());
+        dbAccessor.executeUpdate(sql, prize.getPlace(), prize.getPrizeAmount(), prize.getPrizeType().getId(),
+                prize.getNumberOfSubmissions(), operator, now, prize.getId(), projectId);
         return PrizeProto.newBuilder(prize).setProjectId(projectId).setModifyUser(operator).setModifyDate(nowTs)
                 .build();
+    }
+
+    private int deletePrize(long prizeId) {
+        String sql = """
+                DELETE FROM prize WHERE prize_id = ?
+                """;
+        return dbAccessor.executeUpdate(sql, prizeId);
+    }
+    /* #endregion */
+
+    /* #region studio spec */
+    private GetProjectStudioSpecResponse getProjectStudioSpec(long projectId) {
+        String sql = """
+                SELECT spec.project_studio_spec_id, spec.goals, spec.target_audience, spec.branding_guidelines, spec.disliked_design_websites,
+                spec.other_instructions, spec.winning_criteria, spec.submitters_locked_between_rounds, spec.round_one_introduction,
+                spec.round_two_introduction, spec.colors, spec.fonts, spec.layout_and_size
+                FROM project_studio_specification AS spec
+                JOIN project AS project ON project.project_studio_spec_id=spec.project_studio_spec_id
+                WHERE project.project_id = ?
+                """;
+        List<ProjectStudioSpecProto> result = dbAccessor.executeQuery(sql, (rs, _i) -> {
+            ProjectStudioSpecProto.Builder builder = ProjectStudioSpecProto.newBuilder();
+            ResultSetHelper.applyResultSetLong(rs, 1, builder::setId);
+            ResultSetHelper.applyResultSetString(rs, 2, builder::setGoals);
+            ResultSetHelper.applyResultSetString(rs, 3, builder::setTargetAudience);
+            ResultSetHelper.applyResultSetString(rs, 4, builder::setBrandingGuidelines);
+            ResultSetHelper.applyResultSetString(rs, 5, builder::setDislikedDesignWebsites);
+            ResultSetHelper.applyResultSetString(rs, 6, builder::setOtherInstructions);
+            ResultSetHelper.applyResultSetString(rs, 7, builder::setWinningCriteria);
+            ResultSetHelper.applyResultSetBool(rs, 8, builder::setSubmittersLockedBetweenRounds);
+            ResultSetHelper.applyResultSetString(rs, 9, builder::setRoundOneIntroduction);
+            ResultSetHelper.applyResultSetString(rs, 10, builder::setRoundTwoIntroduction);
+            ResultSetHelper.applyResultSetString(rs, 11, builder::setColors);
+            ResultSetHelper.applyResultSetString(rs, 12, builder::setFonts);
+            ResultSetHelper.applyResultSetString(rs, 13, builder::setLayoutAndSize);
+            return builder.build();
+        }, projectId);
+        if (result.isEmpty()) {
+            return GetProjectStudioSpecResponse.getDefaultInstance();
+        } else {
+            return GetProjectStudioSpecResponse.newBuilder().setProjectStudioSpec(result.get(0)).build();
+        }
     }
 
     private ProjectStudioSpecProto createProjectStudioSpec(long projectId, ProjectStudioSpecProto studioSpec,
@@ -867,12 +1085,20 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
         return ProjectStudioSpecProto.newBuilder(studioSpec).setModifyUser(operator).setModifyDate(nowTs).build();
     }
 
-    public int removeStudioSpecFromProjects(long specId) {
+    private int deleteStudioSpec(long studioSpecId) {
+        String sql = """
+                DELETE FROM project_studio_specification WHERE project_studio_spec_id = ?
+                """;
+        return dbAccessor.executeUpdate(sql, studioSpecId);
+    }
+
+    private int removeStudioSpecFromProjects(long specId) {
         String sql = """
                 UPDATE project SET project_studio_spec_id = NULL WHERE project_studio_spec_id = ?
                 """;
         return dbAccessor.executeUpdate(sql, specId);
     }
+    /* #endregion */
 
     private List<ProjectPropertyTypeProto> getAllProjectPropertyTypes() {
         String sql = """
@@ -887,16 +1113,6 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
         });
     }
 
-    private Map<String, Long> makePropertyNamePropertyIdMap(List<ProjectPropertyTypeProto> propertyTypes) {
-        return propertyTypes.stream()
-                .collect(Collectors.toMap(ProjectPropertyTypeProto::getName, ProjectPropertyTypeProto::getId));
-    }
-
-    private Map<Long, String> makePropertyIdPropertyValueMap(List<ProjectPropertyProto> properties) {
-        return properties.stream()
-                .collect(Collectors.toMap(ProjectPropertyProto::getId, ProjectPropertyProto::getValue));
-    }
-
     private List<Long> getProjectIdsByFileType(long fileTypeId) {
         String sql = """
                 SELECT DISTINCT project_id FROM project_file_type_xref WHERE file_type_id = ?
@@ -906,7 +1122,7 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
         }, fileTypeId);
     }
 
-    public List<Long> getProjectIdsByPrizeId(long prizeId) {
+    private List<Long> getProjectIdsByPrizeId(long prizeId) {
         String sql = """
                 SELECT project_id FROM prize WHERE prize_id = ?
                 """;
@@ -915,7 +1131,7 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
         }, prizeId);
     }
 
-    public List<Long> getProjectIdsByStudioSpecId(long specId) {
+    private List<Long> getProjectIdsByStudioSpecId(long specId) {
         String sql = """
                 SELECT DISTINCT project_id FROM project WHERE project_studio_spec_id = ?
                 """;
@@ -924,6 +1140,7 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
         }, specId);
     }
 
+    /* #region auditors */
     private void auditProjects(List<Long> projectIds, String reason, String operator) {
         for (long id : projectIds) {
             auditProject(id, reason, operator);
@@ -946,8 +1163,9 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
                 """;
         return dbAccessor.executeUpdate(sql, projectId, typeId, value, auditType, operator);
     }
+    /* #endregion */
 
-    /* #region */
+    /* #region existence checkers */
     private boolean isProjectExists(long id) {
         return checkEntityExists("project", "project_id", id);
     }
@@ -974,6 +1192,26 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
     }
     /* #endregion */
 
+    /* #region valiators */
+    private void validateGetProjectsRequest(GetProjectsRequest request) {
+        Helper.assertObjectNotEmpty(request::getProjectIdsCount, "project_ids");
+    }
+
+    private void validateCountUserProjectsRequest(CountUserProjectsRequest request) {
+        Helper.assertObjectNotNull(request::hasProjectStatusId, "project_status_id");
+        Helper.assertObjectNotNull(request::hasIsMyProjects, "is_my_projects");
+        Helper.assertObjectNotNull(request::hasHasManagerRole, "has_manager_role");
+    }
+
+    private void validateGetAllProjectsRequest(GetAllProjectsRequest request) {
+        Helper.assertObjectNotNull(request::hasProjectStatusId, "project_status_id");
+        Helper.assertObjectNotNullAndPositive(request::hasPage, request::getPage, "page");
+        Helper.assertObjectNotNullAndPositive(request::hasPerPage, request::getPerPage, "per_page");
+        Helper.assertObjectNotNull(request::hasCategoryId, "category_id");
+        Helper.assertObjectNotNull(request::hasIsMyProjects, "is_my_projects");
+        Helper.assertObjectNotNull(request::hasHasManagerRole, "has_manager_role");
+    }
+
     private void validateCreateProjectRequest(CreateProjectRequest request, Map<String, Long> propertyTypeNameIdMap) {
         Helper.assertObjectNotNull(request::hasProject, "project");
         Helper.assertObjectNotNull(request::hasOperator, "operator");
@@ -988,9 +1226,15 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
                         "Project property type with name '%s' cannot be found".formatted(property.getName()));
             }
         }
-        validateProjectFileTypes(project.getFileTypesList());
+        for (FileTypeProto fileType : project.getFileTypesList()) {
+            if (fileType.getId() > 0) {
+                validateFileTypeExistence(fileType.getId(), true);
+            } else {
+                validateFileType(fileType);
+            }
+        }
         for (PrizeProto prize : project.getPrizesList()) {
-            validateProjectPrize(prize);
+            validatePrize(prize);
         }
     }
 
@@ -1004,30 +1248,27 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
         Helper.assertObjectNotNull(project.getProjectStatus()::hasId, "project_status_id");
         Helper.assertObjectNotNull(project::hasProjectCategory, "project_category");
         Helper.assertObjectNotNull(project.getProjectCategory()::hasId, "project_category_id");
-        if (!isProjectExists(project.getId())) {
-            throw new IllegalArgumentException(
-                    "Project with id '%s' cannot be found".formatted(project.getId()));
-        }
+        validateProjectExistence(project.getId(), true);
         for (ProjectPropertyProto property : project.getPropertiesList()) {
             if (!propertyTypeNameIdMap.containsKey(property.getName())) {
                 throw new IllegalArgumentException(
                         "Project property type with name '%s' cannot be found".formatted(property.getName()));
             }
         }
-        validateProjectFileTypes(project.getFileTypesList());
+        for (FileTypeProto fileType : project.getFileTypesList()) {
+            if (fileType.getId() > 0) {
+                validateFileTypeExistence(fileType.getId(), true);
+            }
+            validateFileType(fileType);
+        }
         for (PrizeProto prize : project.getPrizesList()) {
             if (prize.getId() > 0) {
-                if (!isPrizeExists(prize.getId())) {
-                    throw new IllegalArgumentException(
-                            "Prize with id '%s' cannot be found".formatted(prize.getId()));
-                }
+                validatePrizeExistence(prize.getId(), true);
             }
-            validateProjectPrize(prize);
+            validatePrize(prize);
         }
-        if (project.getProjectStudioSpec().getId() > 0 && !isStudioSpecExists(project.getProjectStudioSpec().getId())) {
-            throw new IllegalArgumentException(
-                    "Project Studio Spec with id '%s' cannot be found"
-                            .formatted(project.getProjectStudioSpec().getId()));
+        if (project.getProjectStudioSpec().getId() > 0) {
+            validateStudioSpecExistence(project.getProjectStudioSpec().getId(), true);
         }
     }
 
@@ -1042,42 +1283,117 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
     private void validateUpdateProjectFileTypesRequest(UpdateProjectFileTypesRequest request) {
         Helper.assertObjectNotNull(request::hasProjectId, "project_id");
         Helper.assertObjectNotNull(request::hasOperator, "operator");
-        if (!isProjectExists(request.getProjectId())) {
-            throw new IllegalArgumentException(
-                    "Project with id '%s' cannot be found".formatted(request.getProjectId()));
-        }
-        validateProjectFileTypes(request.getFileTypesList());
-    }
-
-    private void validateProjectFileTypes(List<FileTypeProto> fileTypes) {
-        for (FileTypeProto fileType : fileTypes) {
+        validateProjectExistence(request.getProjectId(), true);
+        for (FileTypeProto fileType : request.getFileTypesList()) {
             if (fileType.getId() > 0) {
-                if (!isFileTypeExists(fileType.getId())) {
-                    throw new IllegalArgumentException(
-                            "File type with id '%s' cannot be found".formatted(fileType.getId()));
-                }
-            } else {
-                validateFileType(fileType);
+                validateFileTypeExistence(fileType.getId(), true);
             }
+            validateFileType(fileType);
         }
     }
 
     private void validateUpdateProjectPrizesRequest(UpdateProjectPrizesRequest request) {
         Helper.assertObjectNotNull(request::hasProjectId, "project_id");
         Helper.assertObjectNotNull(request::hasOperator, "operator");
-        if (!isProjectExists(request.getProjectId())) {
-            throw new IllegalArgumentException(
-                    "Project with id '%s' cannot be found".formatted(request.getProjectId()));
-        }
+        validateProjectExistence(request.getProjectId(), true);
         for (PrizeProto prize : request.getPrizesList()) {
             if (prize.getId() > 0) {
-                if (!isPrizeExists(prize.getId())) {
-                    throw new IllegalArgumentException(
-                            "Prize with id '%s' cannot be found".formatted(prize.getId()));
-                }
+                validatePrizeExistence(prize.getId(), true);
             }
-            validateProjectPrize(prize);
+            validatePrize(prize);
+        }
+    }
 
+    private void validateUpdateProjectStudioSpecRequest(UpdateProjectStudioSpecRequest request) {
+        Helper.assertObjectNotNull(request::hasProjectId, "project_id");
+        Helper.assertObjectNotNull(request::hasOperator, "operator");
+        if (request.getProjectStudioSpec().getId() > 0) {
+            validateStudioSpecExistence(request.getProjectStudioSpec().getId(), true);
+        }
+    }
+
+    private void validateCreateFileTypeRequest(CreateFileTypeRequest request) {
+        FileTypeProto fileType = request.getFileType();
+        validateFileType(fileType);
+    }
+
+    private void validateUpdateFileTypeRequest(UpdateFileTypeRequest request) {
+        FileTypeProto fileType = request.getFileType();
+        Helper.assertObjectNotNullAndPositive(fileType::hasId, fileType::getId, "id");
+        validateFileType(fileType);
+        validateFileTypeExistence(fileType.getId(), true);
+    }
+
+    private void validateDeleteFileTypeRequest(DeleteFileTypeRequest request) {
+        Helper.assertObjectNotNull(request::hasFileTypeId, "file_type");
+        Helper.assertObjectNotNull(request::hasOperator, "operator");
+        validateFileTypeExistence(request.getFileTypeId(), true);
+    }
+
+    private void validateCreatePrizeRequest(CreatePrizeRequest request) {
+        PrizeProto prize = request.getPrize();
+        Helper.assertObjectNotNull(request::hasOperator, "operator");
+        Helper.assertObjectNotNull(prize::hasProjectId, "project_id");
+        validatePrize(prize);
+    }
+
+    private void validateUpdatePrizeRequest(UpdatePrizeRequest request) {
+        PrizeProto prize = request.getPrize();
+        Helper.assertObjectNotNull(prize::hasId, "id");
+        Helper.assertObjectNotNull(request::hasOperator, "operator");
+        Helper.assertObjectNotNull(prize::hasProjectId, "project_id");
+        validatePrize(prize);
+        validatePrizeExistence(prize.getId(), true);
+    }
+
+    private void validateDeletePrizeRequest(DeletePrizeRequest request) {
+        Helper.assertObjectNotNull(request::hasPrizeId, "prize_id");
+        Helper.assertObjectNotNull(request::hasOperator, "operator");
+        validatePrizeExistence(request.getPrizeId(), true);
+    }
+
+    private void validateCreateStudioSpecRequest(CreateStudioSpecRequest request) {
+        Helper.assertObjectNotNull(request::hasOperator, "operator");
+    }
+
+    private void validateUpdateStudioSpecRequest(UpdateStudioSpecRequest request) {
+        Helper.assertObjectNotNull(request.getProjectStudioSpec()::hasId, "id");
+        Helper.assertObjectNotNull(request::hasOperator, "operator");
+        validateStudioSpecExistence(request.getProjectStudioSpec().getId(), true);
+    }
+
+    private void validateDeleteStudioSpecRequest(DeleteStudioSpecRequest request) {
+        Helper.assertObjectNotNull(request::hasProjectStudioSpecId, "project_studio_spec_id");
+        Helper.assertObjectNotNull(request::hasOperator, "operator");
+        validateStudioSpecExistence(request.getProjectStudioSpecId(), true);
+    }
+
+    private void validateProjectExistence(long id, boolean existence) {
+        if (isProjectExists(id) ^ existence) {
+            throw new IllegalArgumentException(
+                    "Project with id '%s' %s".formatted(id, existence ? "cannot be found" : "already exists"));
+        }
+    }
+
+    private void validateFileTypeExistence(long id, boolean existence) {
+        if (isFileTypeExists(id) ^ existence) {
+            throw new IllegalArgumentException(
+                    "File type with id '%s' %s".formatted(id, existence ? "cannot be found" : "already exists"));
+        }
+    }
+
+    private void validatePrizeExistence(long id, boolean existence) {
+        if (isPrizeExists(id) ^ existence) {
+            throw new IllegalArgumentException(
+                    "Prize with id '%s' %s".formatted(id, existence ? "cannot be found" : "already exists"));
+        }
+    }
+
+    private void validateStudioSpecExistence(long id, boolean existence) {
+        if (isStudioSpecExists(id) ^ existence) {
+            throw new IllegalArgumentException(
+                    "Project Studio Spec with id '%s' %s".formatted(id,
+                            existence ? "cannot be found" : "already exists"));
         }
     }
 
@@ -1089,100 +1405,11 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
         Helper.assertObjectNotNull(fileType::hasBundledFile, "bundled_file");
     }
 
-    private void validateProjectPrize(PrizeProto prize) {
+    private void validatePrize(PrizeProto prize) {
         Helper.assertObjectNotNull(prize::hasPlace, "place");
         Helper.assertObjectNotNull(prize::hasPrizeAmount, "prize_amount");
         Helper.assertObjectNotNull(prize.getPrizeType()::hasId, "prize_type_id");
         Helper.assertObjectNotNull(prize::hasNumberOfSubmissions, "number_of_submissions");
     }
-
-    private void validateCreateFileTypeRequest(CreateFileTypeRequest request) {
-        FileTypeProto fileType = request.getFileType();
-        validateFileType(fileType);
-    }
-
-    private void validateUpdateFileTypeRequest(UpdateFileTypeRequest request) {
-        FileTypeProto fileType = request.getFileType();
-        Helper.assertObjectNotNullAndPositive(fileType::hasId, fileType::getId, "id");
-        if (!isFileTypeExists(fileType.getId())) {
-            throw new IllegalArgumentException(
-                    "File type with id '%s' cannot be found".formatted(fileType.getId()));
-        }
-        validateFileType(fileType);
-    }
-
-    private void validateDeleteFileTypeRequest(DeleteFileTypeRequest request) {
-        Helper.assertObjectNotNull(request::hasFileTypeId, "file_type");
-        Helper.assertObjectNotNull(request::hasOperator, "operator");
-        if (!isFileTypeExists(request.getFileTypeId())) {
-            throw new IllegalArgumentException(
-                    "File type with id '%s' cannot be found".formatted(request.getFileTypeId()));
-        }
-    }
-
-    private void validateCreatePrizeRequest(CreatePrizeRequest request) {
-        PrizeProto prize = request.getPrize();
-        Helper.assertObjectNotNull(request::hasOperator, "operator");
-        Helper.assertObjectNotNull(prize::hasProjectId, "project_id");
-        validateProjectPrize(prize);
-    }
-
-    private void validateUpdatePrizeRequest(UpdatePrizeRequest request) {
-        PrizeProto prize = request.getPrize();
-        Helper.assertObjectNotNull(prize::hasId, "id");
-        Helper.assertObjectNotNull(request::hasOperator, "operator");
-        Helper.assertObjectNotNull(prize::hasProjectId, "project_id");
-        validateProjectPrize(prize);
-        if (!isPrizeExists(prize.getId())) {
-            throw new IllegalArgumentException(
-                    "Prize with id '%s' cannot be found".formatted(prize.getId()));
-        }
-    }
-
-    private void validateDeletePrizeRequest(DeletePrizeRequest request) {
-        Helper.assertObjectNotNull(request::hasPrizeId, "prize_id");
-        Helper.assertObjectNotNull(request::hasOperator, "operator");
-        if (!isPrizeExists(request.getPrizeId())) {
-            throw new IllegalArgumentException(
-                    "Prize with id '%s' cannot be found".formatted(request.getPrizeId()));
-        }
-    }
-
-    private void validateCreateStudioSpecRequest(CreateStudioSpecRequest request) {
-        Helper.assertObjectNotNull(request::hasOperator, "operator");
-    }
-
-    private void validateUpdateStudioSpecRequest(UpdateStudioSpecRequest request) {
-        Helper.assertObjectNotNull(request.getProjectStudioSpec()::hasId, "id");
-        Helper.assertObjectNotNull(request::hasOperator, "operator");
-        if (!isStudioSpecExists(request.getProjectStudioSpec().getId())) {
-            throw new IllegalArgumentException(
-                    "Project Studio Spec with id '%s' cannot be found"
-                            .formatted(request.getProjectStudioSpec().getId()));
-        }
-    }
-
-    private void validateDeleteStudioSpecRequest(DeleteStudioSpecRequest request) {
-        Helper.assertObjectNotNull(request::hasProjectStudioSpecId, "project_studio_spec_id");
-        Helper.assertObjectNotNull(request::hasOperator, "operator");
-        if (!isStudioSpecExists(request.getProjectStudioSpecId())) {
-            throw new IllegalArgumentException(
-                    "Project Studio Spec with id '%s' cannot be found"
-                            .formatted(request.getProjectStudioSpecId()));
-        }
-    }
-
-    private void validateUpdateProjectStudioSpecRequest(UpdateProjectStudioSpecRequest request) {
-        Helper.assertObjectNotNull(request::hasProjectId, "project_id");
-        Helper.assertObjectNotNull(request::hasOperator, "operator");
-        if (request.getProjectStudioSpec().getId() > 0 && !isStudioSpecExists(request.getProjectStudioSpec().getId())) {
-            throw new IllegalArgumentException(
-                    "Project Studio Spec with id '%s' cannot be found"
-                            .formatted(request.getProjectStudioSpec().getId()));
-        }
-    }
-
-    private void validateGetProjectsRequest(GetProjectsRequest request) {
-        Helper.assertObjectNotEmpty(request::getProjectIdsCount, "project_ids");
-    }
+    /* #endregion */
 }

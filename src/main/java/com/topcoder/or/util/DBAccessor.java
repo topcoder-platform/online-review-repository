@@ -59,7 +59,7 @@ public class DBAccessor {
      * @throws DataAccessException exception
      */
     public List<Map<String, Object>> executeQuery(String query, @Nullable Object... args) {
-        logger.info("executeUpdate: " + query + " with params: " + Arrays.toString(args));
+        logger.info("executeQuery: " + query + " with params: " + Arrays.toString(args));
         return jdbcTemplate.queryForList(query, args);
     }
 }
