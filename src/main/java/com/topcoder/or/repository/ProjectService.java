@@ -406,6 +406,7 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
         validateUpdateProjectStudioSpecRequest(request);
         ProjectStudioSpecProto spec = updateProjectStudioSpec(request.getProjectId(), request.getProjectStudioSpec(),
                 request.getOperator());
+        auditProject(request.getProjectId(), "Updates the project studion specification", request.getOperator());
         responseObserver.onNext(spec);
         responseObserver.onCompleted();
     }
@@ -1278,6 +1279,7 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
 
     private void validateProjectIdProto(ProjectIdProto request) {
         Helper.assertObjectNotNull(request::hasProjectId, "project_id");
+        validateProjectExistence(request.getProjectId(), true);
     }
 
     private void validateUpdateProjectFileTypesRequest(UpdateProjectFileTypesRequest request) {
