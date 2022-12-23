@@ -1,10 +1,14 @@
 package com.topcoder.or.util;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.math.MathContext;
 import java.util.Collections;
 import java.util.Date;
 import java.util.function.Supplier;
 
 import com.google.protobuf.Timestamp;
+import com.topcoder.onlinereview.grpc.payment.proto.BigDecimalProto;
 
 public final class Helper {
 
@@ -54,6 +58,15 @@ public final class Helper {
 
     public static Date extractDate(Supplier<Boolean> verifier, Supplier<Timestamp> extractor) {
         return verifier.get() ? new Date(extractor.get().getSeconds() * 1000) : null;
+    }
+
+    public static BigDecimal extractBigDecimal(Supplier<Boolean> verifier, Supplier<BigDecimalProto> extractor) {
+        if (!verifier.get()) {
+            return null;
+        }
+        BigDecimalProto serialized = extractor.get();
+        return new BigDecimal(new BigInteger(serialized.getValue().toByteArray()), serialized.getScale(),
+                new MathContext(serialized.getPrecision()));
     }
 
     public static Date convertDate(Timestamp date) {

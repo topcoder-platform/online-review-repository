@@ -3,7 +3,9 @@ package com.topcoder.or.util;
 import org.slf4j.Logger;
 import org.springframework.dao.DataAccessException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.PreparedStatementCreator;
 import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.support.GeneratedKeyHolder;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Nullable;
@@ -61,5 +63,12 @@ public class DBAccessor {
     public List<Map<String, Object>> executeQuery(String query, @Nullable Object... args) {
         logger.info("executeQuery: " + query + " with params: " + Arrays.toString(args));
         return jdbcTemplate.queryForList(query, args);
+    }
+
+    public Number executeUpdateReturningKey(String query, PreparedStatementCreator psc) {
+        logger.info("executeUpdate: " + query);
+        GeneratedKeyHolder generatedKeyHolder = new GeneratedKeyHolder();
+        jdbcTemplate.update(psc, generatedKeyHolder);
+        return generatedKeyHolder.getKey();
     }
 }

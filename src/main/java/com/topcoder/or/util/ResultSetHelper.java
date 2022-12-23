@@ -1,10 +1,13 @@
 package com.topcoder.or.util;
 
+import java.math.BigDecimal;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.function.Consumer;
 
+import com.google.protobuf.ByteString;
 import com.google.protobuf.Timestamp;
+import com.topcoder.onlinereview.grpc.payment.proto.BigDecimalProto;
 
 public final class ResultSetHelper {
 
@@ -35,6 +38,22 @@ public final class ResultSetHelper {
     public static void applyResultSetDouble(ResultSet resultset, String name, Consumer<Double> setMethod)
             throws SQLException {
         double v = resultset.getDouble(name);
+        if (!resultset.wasNull()) {
+            setMethod.accept(v);
+        }
+    }
+
+    public static void applyResultSetFloat(ResultSet resultset, int index, Consumer<Float> setMethod)
+            throws SQLException {
+        float v = resultset.getFloat(index);
+        if (!resultset.wasNull()) {
+            setMethod.accept(v);
+        }
+    }
+
+    public static void applyResultSetFloat(ResultSet resultset, String name, Consumer<Float> setMethod)
+            throws SQLException {
+        float v = resultset.getFloat(name);
         if (!resultset.wasNull()) {
             setMethod.accept(v);
         }
@@ -101,6 +120,19 @@ public final class ResultSetHelper {
         java.sql.Timestamp v = resultset.getTimestamp(name);
         if (v != null) {
             setMethod.accept(Timestamp.newBuilder().setSeconds(v.toInstant().getEpochSecond()).build());
+        }
+    }
+
+    public static void applyResultSetBigDecimal(ResultSet resultset, int index, Consumer<BigDecimalProto> setMethod)
+            throws SQLException {
+        double v = resultset.getDouble(index);
+        if (!resultset.wasNull()) {
+            BigDecimal bigDecimal = new BigDecimal(v);
+            setMethod.accept(BigDecimalProto.newBuilder()
+                    .setScale(bigDecimal.scale())
+                    .setPrecision(bigDecimal.precision())
+                    .setValue(ByteString.copyFrom(bigDecimal.unscaledValue().toByteArray()))
+                    .build());
         }
     }
 }
