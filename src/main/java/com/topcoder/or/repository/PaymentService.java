@@ -32,8 +32,8 @@ public class PaymentService extends PaymentServiceGrpc.PaymentServiceImplBase {
                 """;
         ProjectPaymentProto p = request.getProjectPayment();
         final BigDecimal amount = Helper.extractBigDecimal(p::hasAmount, p::getAmount);
-        final long pactPaymentId = Helper.extract(p::hasPactsPaymentId, p::getPactsPaymentId);
-        final long submissionId = Helper.extract(p::hasSubmissionId, p::getSubmissionId);
+        final Long pactPaymentId = Helper.extract(p::hasPactsPaymentId, p::getPactsPaymentId);
+        final Long submissionId = Helper.extract(p::hasSubmissionId, p::getSubmissionId);
         Number id = dbAccessor.executeUpdateReturningKey(sql, conn -> {
             PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
             ps.setLong(1, p.getResourceId());
@@ -58,8 +58,8 @@ public class PaymentService extends PaymentServiceGrpc.PaymentServiceImplBase {
                 """;
         ProjectPaymentProto p = request.getProjectPayment();
         final BigDecimal amount = Helper.extractBigDecimal(p::hasAmount, p::getAmount);
-        final long pactPaymentId = Helper.extract(p::hasPactsPaymentId, p::getPactsPaymentId);
-        final long submissionId = Helper.extract(p::hasSubmissionId, p::getSubmissionId);
+        final Long pactPaymentId = Helper.extract(p::hasPactsPaymentId, p::getPactsPaymentId);
+        final Long submissionId = Helper.extract(p::hasSubmissionId, p::getSubmissionId);
         int affected = dbAccessor.executeUpdate(sql, p.getProjectPaymentType().getId(), p.getResourceId(), submissionId,
                 amount, pactPaymentId, request.getOperator(), p.getId());
         responseObserver.onNext(CountProto.newBuilder().setCount(affected).build());
