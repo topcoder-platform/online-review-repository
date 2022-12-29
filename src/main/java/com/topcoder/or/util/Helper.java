@@ -76,4 +76,8 @@ public final class Helper {
     public static String getInClause(Integer count) {
         return String.join(",", Collections.nCopies(count, "?"));
     }
+
+    public static String buildNStatement(Integer count, String phrase, String delimiter) {
+        return String.join(delimiter, Collections.nCopies(count, phrase));
+    }
 }
