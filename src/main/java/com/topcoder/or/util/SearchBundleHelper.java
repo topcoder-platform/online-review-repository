@@ -5,6 +5,8 @@ import java.util.Map;
 
 import com.topcoder.onlinereview.component.datavalidator.IntegerValidator;
 import com.topcoder.onlinereview.component.datavalidator.LongValidator;
+import com.topcoder.onlinereview.component.datavalidator.NotValidator;
+import com.topcoder.onlinereview.component.datavalidator.NullValidator;
 import com.topcoder.onlinereview.component.datavalidator.ObjectValidator;
 import com.topcoder.onlinereview.component.datavalidator.StringValidator;
 import com.topcoder.onlinereview.component.search.SearchBundle;
@@ -16,6 +18,7 @@ public final class SearchBundleHelper {
     public static final int UPLOAD_SEARCH_BUNDLE = 3;
     public static final int SUBMISSION_SEARCH_BUNDLE = 4;
     public static final int PROJECT_SEARCH_BUNDLE = 5;
+    public static final int REVIEW_SEARCH_BUNDLE = 6;
 
     /**
      * Set the searchable fields of given SearchBundle.
@@ -43,6 +46,7 @@ public final class SearchBundleHelper {
 
         // Set up an IntegerValidator for latter use.
         IntegerValidator greaterThanZeroValidator = IntegerValidator.greaterThan(0);
+        ObjectValidator notNullValidator = new NotValidator(new NullValidator());
 
         // Set the fields with different validator.
         switch (key) {
@@ -94,6 +98,15 @@ public final class SearchBundleHelper {
                 fields.put("ProjectPropertyName", StringValidator.hasLength(IntegerValidator.lessThanOrEqualTo(64)));
                 fields.put("ProjectPropertyValue", StringValidator.hasLength(IntegerValidator.lessThanOrEqualTo(4096)));
                 fields.put("TCDirectProjectID", LongValidator.isPositive());
+                break;
+
+            case REVIEW_SEARCH_BUNDLE:
+                fields.put("scorecardType", notNullValidator);
+                fields.put("submission", notNullValidator);
+                fields.put("projectPhase", notNullValidator);
+                fields.put("reviewer", notNullValidator);
+                fields.put("project", notNullValidator);
+                fields.put("committed", notNullValidator);
                 break;
 
             default:
