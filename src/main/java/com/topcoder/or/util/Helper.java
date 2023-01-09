@@ -73,6 +73,10 @@ public final class Helper {
         return new Date(date.getSeconds() * 1000);
     }
 
+    public static java.sql.Timestamp convertTimestamp(Timestamp date) {
+        return new java.sql.Timestamp(date.getSeconds() * 1000);
+    }
+
     public static String getInClause(Integer count) {
         return String.join(",", Collections.nCopies(count, "?"));
     }
