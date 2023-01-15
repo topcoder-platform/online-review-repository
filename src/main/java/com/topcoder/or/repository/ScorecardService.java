@@ -1,21 +1,23 @@
 package com.topcoder.or.repository;
 
-import java.sql.ResultSet;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
 import javax.annotation.PostConstruct;
 
+import org.springframework.util.SerializationUtils;
+
 import com.google.protobuf.Empty;
-import com.google.protobuf.Timestamp;
-import com.google.rpc.Help;
 import com.topcoder.onlinereview.component.id.DBHelper;
 import com.topcoder.onlinereview.component.id.IDGenerator;
+import com.topcoder.onlinereview.component.search.SearchBundle;
+import com.topcoder.onlinereview.component.search.SearchBundleManager;
+import com.topcoder.onlinereview.component.search.filter.Filter;
 import com.topcoder.onlinereview.grpc.scorecard.proto.*;
 import com.topcoder.or.util.DBAccessor;
 import com.topcoder.or.util.Helper;
 import com.topcoder.or.util.ResultSetHelper;
+import com.topcoder.or.util.SearchBundleHelper;
 
 import io.grpc.stub.StreamObserver;
 import net.devh.boot.grpc.server.service.GrpcService;
@@ -24,25 +26,35 @@ import net.devh.boot.grpc.server.service.GrpcService;
 public class ScorecardService extends ScorecardServiceGrpc.ScorecardServiceImplBase {
     private final DBAccessor dbAccessor;
     private final DBHelper dbHelper;
+    private final SearchBundleManager searchBundleManager;
 
+    private static final String SCORECARD_SEARCH_BUNDLE_NAME = "ScorecardSearchBundle";
+
+    private SearchBundle searchBundle;
     private IDGenerator groupIdGenerator;
     private IDGenerator questionIdGenerator;
+    private IDGenerator scorecardIdGenerator;
     private IDGenerator sectionIdGenerator;
 
     private static final String SCORECARD_GROUP_ID_SEQUENCE = "scorecard_group_id_seq";
     private static final String SCORECARD_QUESTION_ID_SEQUENCE = "scorecard_question_id_seq";
+    private static final String SCORECARD_ID_SEQUENCE = "scorecard_id_seq";
     private static final String SCORECARD_SECTION_ID_SEQUENCE = "scorecard_section_id_seq";
 
-    public ScorecardService(DBAccessor dbAccessor, DBHelper dbHelper) {
+    public ScorecardService(DBAccessor dbAccessor, DBHelper dbHelper, SearchBundleManager searchBundleManager) {
         this.dbAccessor = dbAccessor;
         this.dbHelper = dbHelper;
+        this.searchBundleManager = searchBundleManager;
     }
 
     @PostConstruct
     public void postRun() {
+        searchBundle = searchBundleManager.getSearchBundle(SCORECARD_SEARCH_BUNDLE_NAME);
         groupIdGenerator = new IDGenerator(SCORECARD_GROUP_ID_SEQUENCE, dbHelper);
         questionIdGenerator = new IDGenerator(SCORECARD_QUESTION_ID_SEQUENCE, dbHelper);
+        scorecardIdGenerator = new IDGenerator(SCORECARD_ID_SEQUENCE, dbHelper);
         sectionIdGenerator = new IDGenerator(SCORECARD_SECTION_ID_SEQUENCE, dbHelper);
+        SearchBundleHelper.setSearchableFields(searchBundle, SearchBundleHelper.SCORECARD_SEARCH_BUNDLE);
     }
 
     @Override
@@ -252,6 +264,151 @@ public class ScorecardService extends ScorecardServiceGrpc.ScorecardServiceImplB
     }
 
     @Override
+    public void createScorecard(CreateScorecardRequest request, StreamObserver<ScorecardIdProto> responseObserver) {
+        validateCreateScorecardRequest(request);
+        long newId = scorecardIdGenerator.getNextID();
+        createScorecard(request, newId);
+        responseObserver.onNext(ScorecardIdProto.newBuilder().setScorecardId(newId).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void updateScorecard(UpdateScorecardRequest request, StreamObserver<CountProto> responseObserver) {
+        validateUpdateScorecardRequest(request);
+        String sql = """
+                UPDATE scorecard
+                SET scorecard_status_id = ?, scorecard_type_id = ?, project_category_id = ?, name = ?, version = ?,
+                min_score = ?, max_score = ?, modify_user = ?, modify_date = ?
+                WHERE scorecard_id = ?
+                """;
+        int affected = dbAccessor.executeUpdate(sql, request.getScorecardStatusId(), request.getScorecardTypeId(),
+                request.getProjectCategoryId(), request.getName(), request.getVersion(), request.getMinScore(),
+                request.getMaxScore(), request.getModifyUser(), Helper.convertDate(request.getModifyDate()),
+                request.getScorecardId());
+        responseObserver.onNext(CountProto.newBuilder().setCount(affected).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void getAllScorecardTypes(Empty request, StreamObserver<GetAllScorecardTypesResponse> responseObserver) {
+        String sql = """
+                SELECT scorecard_type_id, name
+                FROM scorecard_type_lu
+                """;
+        List<ScorecardTypeProto> result = dbAccessor.executeQuery(sql, (rs, _i) -> {
+            ScorecardTypeProto.Builder builder = ScorecardTypeProto.newBuilder();
+            ResultSetHelper.applyResultSetLong(rs, 1, builder::setScorecardTypeId);
+            ResultSetHelper.applyResultSetString(rs, 2, builder::setName);
+            return builder.build();
+        });
+        responseObserver.onNext(GetAllScorecardTypesResponse.newBuilder().addAllScorecardTypes(result).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void getAllQuestionTypes(Empty request, StreamObserver<GetAllQuestionTypesResponse> responseObserver) {
+        String sql = """
+                SELECT scorecard_question_type_id, name
+                FROM scorecard_question_type_lu
+                """;
+        List<QuestionTypeProto> result = dbAccessor.executeQuery(sql, (rs, _i) -> {
+            QuestionTypeProto.Builder builder = QuestionTypeProto.newBuilder();
+            ResultSetHelper.applyResultSetLong(rs, 1, builder::setScorecardQuestionTypeId);
+            ResultSetHelper.applyResultSetString(rs, 2, builder::setName);
+            return builder.build();
+        });
+        responseObserver.onNext(GetAllQuestionTypesResponse.newBuilder().addAllQuestionTypes(result).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void getAllScorecardStatuses(Empty request,
+            StreamObserver<GetAllScorecardStatusesResponse> responseObserver) {
+        String sql = """
+                SELECT scorecard_status_id, name
+                FROM scorecard_status_lu
+                """;
+        List<ScorecardStatusProto> result = dbAccessor.executeQuery(sql, (rs, _i) -> {
+            ScorecardStatusProto.Builder builder = ScorecardStatusProto.newBuilder();
+            ResultSetHelper.applyResultSetLong(rs, 1, builder::setScorecardStatusId);
+            ResultSetHelper.applyResultSetString(rs, 2, builder::setName);
+            return builder.build();
+        });
+        responseObserver.onNext(GetAllScorecardStatusesResponse.newBuilder().addAllScorecardStatuses(result).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void getDefaultScorecardsIDInfo(ProjectCategoryIdProto request,
+            StreamObserver<GetDefaultScorecardsIDInfoResponse> responseObserver) {
+        validateProjectCategoryIdProto(request);
+        String sql = """
+                SELECT scorecard_type_id, scorecard_id
+                FROM default_scorecard
+                WHERE project_category_id = ?
+                """;
+        List<ScorecardsIDInfoProto> result = dbAccessor.executeQuery(sql, (rs, _i) -> {
+            ScorecardsIDInfoProto.Builder builder = ScorecardsIDInfoProto.newBuilder();
+            ResultSetHelper.applyResultSetLong(rs, 1, builder::setScorecardTypeId);
+            ResultSetHelper.applyResultSetLong(rs, 2, builder::setScorecardId);
+            return builder.build();
+        });
+        responseObserver.onNext(GetDefaultScorecardsIDInfoResponse.newBuilder().addAllScorecardIdInfos(result).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void getScorecards(ScorecardIdsProto request, StreamObserver<GetScorecardsResponse> responseObserver) {
+        validateScorecardIdsProto(request);
+        String sql = """
+                SELECT sc.scorecard_id, status.scorecard_status_id as status_id, type.scorecard_type_id as type_id, sc.project_category_id,
+                sc.name as scorecard_name, sc.version, sc.min_score, sc.max_score, sc.create_user, sc.create_date,
+                sc.modify_user, sc.modify_date, status.name AS status_name, type.name AS type_name
+                FROM scorecard AS sc JOIN scorecard_type_lu AS type ON sc.scorecard_type_id=type.scorecard_type_id
+                JOIN scorecard_status_lu AS status ON sc.scorecard_status_id=status.scorecard_status_id
+                WHERE sc.scorecard_id IN (%s)
+                """;
+        String inSql = Helper.getInClause(request.getScorecardIdsCount());
+        List<ScorecardProto> result = dbAccessor.executeQuery(sql.formatted(inSql), (rs, _i) -> {
+            ScorecardProto.Builder builder = ScorecardProto.newBuilder();
+            ResultSetHelper.applyResultSetLong(rs, 1, builder::setScorecardId);
+            ResultSetHelper.applyResultSetLong(rs, 2, builder::setScorecardStatusId);
+            ResultSetHelper.applyResultSetLong(rs, 3, builder::setScorecardTypeId);
+            ResultSetHelper.applyResultSetLong(rs, 4, builder::setProjectCategoryId);
+            ResultSetHelper.applyResultSetString(rs, 5, builder::setName);
+            ResultSetHelper.applyResultSetString(rs, 6, builder::setVersion);
+            ResultSetHelper.applyResultSetFloat(rs, 7, builder::setMinScore);
+            ResultSetHelper.applyResultSetFloat(rs, 8, builder::setMaxScore);
+            ResultSetHelper.applyResultSetString(rs, 9, builder::setCreateUser);
+            ResultSetHelper.applyResultSetTimestamp(rs, 10, builder::setCreateDate);
+            ResultSetHelper.applyResultSetString(rs, 11, builder::setModifyUser);
+            ResultSetHelper.applyResultSetTimestamp(rs, 12, builder::setModifyDate);
+            ResultSetHelper.applyResultSetString(rs, 13, builder::setScorecardStatusName);
+            ResultSetHelper.applyResultSetString(rs, 14, builder::setScorecardTypeName);
+            return builder.build();
+        }, request.getScorecardIdsList().toArray());
+        responseObserver.onNext(GetScorecardsResponse.newBuilder().addAllScorecards(result).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void getScorecardsInUse(ScorecardIdsProto request, StreamObserver<ScorecardIdsProto> responseObserver) {
+        validateScorecardIdsProto(request);
+        String sql = """
+                SELECT pc.parameter
+                FROM phase_criteria pc
+                JOIN phase_criteria_type_lu pct ON pc.phase_criteria_type_id = pct.phase_criteria_type_id
+                WHERE pct.name='Scorecard ID' AND pc.parameter IN (%s)
+                """;
+        String inSql = Helper.getInClause(request.getScorecardIdsCount());
+        List<Long> result = dbAccessor.executeQuery(sql.formatted(inSql), (rs, _i) -> {
+            return rs.getLong(1);
+        }, request.getScorecardIdsList().toArray());
+        responseObserver.onNext(ScorecardIdsProto.newBuilder().addAllScorecardIds(result).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
     public void createSection(CreateSectionRequest request, StreamObserver<SectionIdProto> responseObserver) {
         validateCreateSectionRequest(request);
         long newId = sectionIdGenerator.getNextID();
@@ -355,6 +512,31 @@ public class ScorecardService extends ScorecardServiceGrpc.ScorecardServiceImplB
         responseObserver.onCompleted();
     }
 
+    @Override
+    public void searchScorecards(FilterProto request, StreamObserver<GetScorecardsResponse> responseObserver) {
+        Filter filter = (Filter) SerializationUtils.deserialize(request.getFilter().toByteArray());
+        List<ScorecardProto> result = searchBundle.search(filter, (rs, _i) -> {
+            ScorecardProto.Builder builder = ScorecardProto.newBuilder();
+            ResultSetHelper.applyResultSetLong(rs, "scorecard_id", builder::setScorecardId);
+            ResultSetHelper.applyResultSetLong(rs, "status_id", builder::setScorecardStatusId);
+            ResultSetHelper.applyResultSetLong(rs, "type_id", builder::setScorecardTypeId);
+            ResultSetHelper.applyResultSetLong(rs, "project_category_id", builder::setProjectCategoryId);
+            ResultSetHelper.applyResultSetString(rs, "status_name", builder::setName);
+            ResultSetHelper.applyResultSetString(rs, "version", builder::setVersion);
+            ResultSetHelper.applyResultSetFloat(rs, "min_score", builder::setMinScore);
+            ResultSetHelper.applyResultSetFloat(rs, "max_score", builder::setMaxScore);
+            ResultSetHelper.applyResultSetString(rs, "create_user", builder::setCreateUser);
+            ResultSetHelper.applyResultSetTimestamp(rs, "create_date", builder::setCreateDate);
+            ResultSetHelper.applyResultSetString(rs, "modify_user", builder::setModifyUser);
+            ResultSetHelper.applyResultSetTimestamp(rs, "modify_date", builder::setModifyDate);
+            ResultSetHelper.applyResultSetString(rs, "status_name", builder::setScorecardStatusName);
+            ResultSetHelper.applyResultSetString(rs, "type_name", builder::setScorecardTypeName);
+            return builder.build();
+        });
+        responseObserver.onNext(GetScorecardsResponse.newBuilder().addAllScorecards(result).build());
+        responseObserver.onCompleted();
+    }
+
     private List<Long> generateIds(int length, IDGenerator idGenerator) {
         List<Long> ids = new ArrayList<>(length);
         for (int i = 0; i < length; i++) {
@@ -383,6 +565,18 @@ public class ScorecardService extends ScorecardServiceGrpc.ScorecardServiceImplB
                 request.getScorecardSectionId(), request.getDescription(), guideline, request.getWeight(),
                 request.getSort(), request.getUploadDocument(), request.getUploadDocumentRequired(),
                 request.getOperator(), request.getOperator());
+    }
+
+    private int createScorecard(CreateScorecardRequest request, long scorecardId) {
+        String sql = """
+                INSERT INTO scorecard(scorecard_id, scorecard_status_id, scorecard_type_id, project_category_id, name, version,
+                min_score, max_score, create_user, create_date, modify_user, modify_date)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """;
+        return dbAccessor.executeUpdate(sql, scorecardId, request.getScorecardStatusId(), request.getScorecardTypeId(),
+                request.getProjectCategoryId(), request.getName(), request.getVersion(), request.getMinScore(),
+                request.getMaxScore(), request.getCreateUser(), Helper.convertDate(request.getCreateDate()),
+                request.getModifyUser(), Helper.convertDate(request.getModifyDate()));
     }
 
     private int createSection(CreateSectionRequest request, long scorecardSectionId) {
@@ -470,6 +664,41 @@ public class ScorecardService extends ScorecardServiceGrpc.ScorecardServiceImplB
 
     private void validateSectionIdProto(SectionIdProto request) {
         Helper.assertObjectNotNull(request::hasScorecardSectionId, "scorecard_section_id");
+    }
+
+    private void validateCreateScorecardRequest(CreateScorecardRequest request) {
+        Helper.assertObjectNotNull(request::hasScorecardStatusId, "scorecard_status_id");
+        Helper.assertObjectNotNull(request::hasScorecardTypeId, "scorecard_type_id");
+        Helper.assertObjectNotNull(request::hasProjectCategoryId, "project_category_id");
+        Helper.assertObjectNotNull(request::hasName, "name");
+        Helper.assertObjectNotNull(request::hasVersion, "version");
+        Helper.assertObjectNotNull(request::hasMinScore, "min_score");
+        Helper.assertObjectNotNull(request::hasMaxScore, "max_score");
+        Helper.assertObjectNotNull(request::hasCreateUser, "create_user");
+        Helper.assertObjectNotNull(request::hasCreateDate, "create_date");
+        Helper.assertObjectNotNull(request::hasModifyUser, "modify_user");
+        Helper.assertObjectNotNull(request::hasModifyDate, "modify_date");
+    }
+
+    private void validateUpdateScorecardRequest(UpdateScorecardRequest request) {
+        Helper.assertObjectNotNull(request::hasScorecardId, "scorecard_id");
+        Helper.assertObjectNotNull(request::hasScorecardStatusId, "scorecard_status_id");
+        Helper.assertObjectNotNull(request::hasScorecardTypeId, "scorecard_type_id");
+        Helper.assertObjectNotNull(request::hasProjectCategoryId, "project_category_id");
+        Helper.assertObjectNotNull(request::hasName, "name");
+        Helper.assertObjectNotNull(request::hasVersion, "version");
+        Helper.assertObjectNotNull(request::hasMinScore, "min_score");
+        Helper.assertObjectNotNull(request::hasMaxScore, "max_score");
+        Helper.assertObjectNotNull(request::hasModifyUser, "modify_user");
+        Helper.assertObjectNotNull(request::hasModifyDate, "modify_date");
+    }
+
+    private void validateProjectCategoryIdProto(ProjectCategoryIdProto request) {
+        Helper.assertObjectNotNull(request::hasProjectCategoryId, "project_category_id");
+    }
+
+    private void validateScorecardIdsProto(ScorecardIdsProto request) {
+        Helper.assertObjectNotEmpty(request::getScorecardIdsCount, "scorecard_ids");
     }
 
     private void validateCreateSectionRequest(CreateSectionRequest request) {

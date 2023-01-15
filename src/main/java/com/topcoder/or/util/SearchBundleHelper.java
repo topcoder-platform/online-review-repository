@@ -19,6 +19,7 @@ public final class SearchBundleHelper {
     public static final int SUBMISSION_SEARCH_BUNDLE = 4;
     public static final int PROJECT_SEARCH_BUNDLE = 5;
     public static final int REVIEW_SEARCH_BUNDLE = 6;
+    public static final int SCORECARD_SEARCH_BUNDLE = 7;
 
     /**
      * Set the searchable fields of given SearchBundle.
@@ -107,6 +108,17 @@ public final class SearchBundleHelper {
                 fields.put("reviewer", notNullValidator);
                 fields.put("project", notNullValidator);
                 fields.put("committed", notNullValidator);
+                break;
+
+            case SCORECARD_SEARCH_BUNDLE:
+                fields.put("ScorecardStatusID", LongValidator.isPositive());
+                fields.put("ScorecardTypeID", LongValidator.isPositive());
+                fields.put("ProjectCategoryID", LongValidator.isPositive());
+                fields.put("ProjectID", LongValidator.isPositive());
+                fields.put("ScorecardStatusName", StringValidator.hasLength(IntegerValidator.lessThanOrEqualTo(64)));
+                fields.put("ScorecardTypeName", StringValidator.hasLength(IntegerValidator.lessThanOrEqualTo(64)));
+                fields.put("ScorecardName", StringValidator.hasLength(IntegerValidator.lessThanOrEqualTo(64)));
+                fields.put("ScorecardVersion", StringValidator.hasLength(IntegerValidator.lessThanOrEqualTo(16)));
                 break;
 
             default:
