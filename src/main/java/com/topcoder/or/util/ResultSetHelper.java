@@ -135,4 +135,17 @@ public final class ResultSetHelper {
                     .build());
         }
     }
+
+    public static void applyResultSetBigDecimal(ResultSet resultset, String name, Consumer<BigDecimalProto> setMethod)
+            throws SQLException {
+        double v = resultset.getDouble(name);
+        if (!resultset.wasNull()) {
+            BigDecimal bigDecimal = new BigDecimal(v);
+            setMethod.accept(BigDecimalProto.newBuilder()
+                    .setScale(bigDecimal.scale())
+                    .setPrecision(bigDecimal.precision())
+                    .setValue(ByteString.copyFrom(bigDecimal.unscaledValue().toByteArray()))
+                    .build());
+        }
+    }
 }

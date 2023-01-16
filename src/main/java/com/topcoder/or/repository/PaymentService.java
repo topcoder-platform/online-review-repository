@@ -6,6 +6,13 @@ import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 
+import javax.annotation.PostConstruct;
+
+import org.springframework.util.SerializationUtils;
+
+import com.topcoder.onlinereview.component.search.SearchBundle;
+import com.topcoder.onlinereview.component.search.SearchBundleManager;
+import com.topcoder.onlinereview.component.search.filter.Filter;
 import com.topcoder.onlinereview.grpc.payment.proto.*;
 import com.topcoder.or.util.DBAccessor;
 import com.topcoder.or.util.Helper;
@@ -17,9 +24,20 @@ import net.devh.boot.grpc.server.service.GrpcService;
 @GrpcService
 public class PaymentService extends PaymentServiceGrpc.PaymentServiceImplBase {
     private final DBAccessor dbAccessor;
+    private final SearchBundleManager searchBundleManager;
 
-    public PaymentService(DBAccessor dbAccessor) {
+    private static final String PAYMENT_SEARCH_BUNDLE_NAME = "ProjectPaymentSearchBundle";
+
+    private SearchBundle searchBundle;
+
+    public PaymentService(DBAccessor dbAccessor, SearchBundleManager searchBundleManager) {
         this.dbAccessor = dbAccessor;
+        this.searchBundleManager = searchBundleManager;
+    }
+
+    @PostConstruct
+    public void postRun() {
+        searchBundle = searchBundleManager.getSearchBundle(PAYMENT_SEARCH_BUNDLE_NAME);
     }
 
     @Override
@@ -70,7 +88,7 @@ public class PaymentService extends PaymentServiceGrpc.PaymentServiceImplBase {
     public void getPayment(IdProto request, StreamObserver<ProjectPaymentProto> responseObserver) {
         validateIdProto(request);
         String sql = """
-                SELECT pp.resource_id, pp.submission_id, pp.amount, pp.pacts_payment_id, pp.create_user, pp.create_date,
+                SELECT pp.project_payment_id, pp.resource_id, pp.submission_id, pp.amount, pp.pacts_payment_id, pp.create_user, pp.create_date,
                 pp.modify_user, pp.modify_date, ppt.project_payment_type_id, ppt.name, ppt.mergeable
                 FROM project_payment pp
                 LEFT JOIN project_payment_type_lu ppt on pp.project_payment_type_id = ppt.project_payment_type_id
@@ -78,18 +96,19 @@ public class PaymentService extends PaymentServiceGrpc.PaymentServiceImplBase {
                 """;
         List<ProjectPaymentProto> result = dbAccessor.executeQuery(sql, (rs, _i) -> {
             ProjectPaymentProto.Builder builder = ProjectPaymentProto.newBuilder();
-            ResultSetHelper.applyResultSetLong(rs, 1, builder::setResourceId);
-            ResultSetHelper.applyResultSetLong(rs, 2, builder::setSubmissionId);
-            ResultSetHelper.applyResultSetBigDecimal(rs, 3, builder::setAmount);
-            ResultSetHelper.applyResultSetLong(rs, 4, builder::setPactsPaymentId);
-            ResultSetHelper.applyResultSetString(rs, 5, builder::setCreateUser);
-            ResultSetHelper.applyResultSetTimestamp(rs, 6, builder::setCreateDate);
-            ResultSetHelper.applyResultSetString(rs, 7, builder::setModifyUser);
-            ResultSetHelper.applyResultSetTimestamp(rs, 8, builder::setModifyDate);
+            ResultSetHelper.applyResultSetLong(rs, 1, builder::setId);
+            ResultSetHelper.applyResultSetLong(rs, 2, builder::setResourceId);
+            ResultSetHelper.applyResultSetLong(rs, 3, builder::setSubmissionId);
+            ResultSetHelper.applyResultSetBigDecimal(rs, 4, builder::setAmount);
+            ResultSetHelper.applyResultSetLong(rs, 5, builder::setPactsPaymentId);
+            ResultSetHelper.applyResultSetString(rs, 6, builder::setCreateUser);
+            ResultSetHelper.applyResultSetTimestamp(rs, 7, builder::setCreateDate);
+            ResultSetHelper.applyResultSetString(rs, 8, builder::setModifyUser);
+            ResultSetHelper.applyResultSetTimestamp(rs, 9, builder::setModifyDate);
             ProjectPaymentTypeProto.Builder pBuilder = ProjectPaymentTypeProto.newBuilder();
-            ResultSetHelper.applyResultSetLong(rs, 9, pBuilder::setId);
-            ResultSetHelper.applyResultSetString(rs, 10, pBuilder::setName);
-            ResultSetHelper.applyResultSetBool(rs, 11, pBuilder::setMergeable);
+            ResultSetHelper.applyResultSetLong(rs, 10, pBuilder::setId);
+            ResultSetHelper.applyResultSetString(rs, 11, pBuilder::setName);
+            ResultSetHelper.applyResultSetBool(rs, 12, pBuilder::setMergeable);
             builder.setProjectPaymentType(pBuilder.build());
             return builder.build();
         }, request.getId());
@@ -257,6 +276,32 @@ public class PaymentService extends PaymentServiceGrpc.PaymentServiceImplBase {
         }, request.getProjectCategoryId(), request.getResourceRoleId());
         responseObserver.onNext(result.isEmpty() ? GetDefaultPaymentResponse.getDefaultInstance()
                 : GetDefaultPaymentResponse.newBuilder().setDefaultPayment(result.get(0)).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void searchPayments(FilterProto request, StreamObserver<SearchPaymentsResponse> responseObserver) {
+        Filter filter = (Filter) SerializationUtils.deserialize(request.getFilter().toByteArray());
+        List<ProjectPaymentProto> result = searchBundle.search(filter, (rs, _i) -> {
+            ProjectPaymentProto.Builder builder = ProjectPaymentProto.newBuilder();
+            ResultSetHelper.applyResultSetLong(rs, "project_payment_id", builder::setId);
+            ResultSetHelper.applyResultSetLong(rs, "resource_id", builder::setResourceId);
+            ResultSetHelper.applyResultSetLong(rs, "submission_id", builder::setSubmissionId);
+            ResultSetHelper.applyResultSetBigDecimal(rs, "amount", builder::setAmount);
+            ResultSetHelper.applyResultSetLong(rs, "pacts_payment_id", builder::setPactsPaymentId);
+            ResultSetHelper.applyResultSetString(rs, "create_user", builder::setCreateUser);
+            ResultSetHelper.applyResultSetTimestamp(rs, "create_date", builder::setCreateDate);
+            ResultSetHelper.applyResultSetString(rs, "modify_user", builder::setModifyUser);
+            ResultSetHelper.applyResultSetTimestamp(rs, "modify_date", builder::setModifyDate);
+            ProjectPaymentTypeProto.Builder pBuilder = ProjectPaymentTypeProto.newBuilder();
+            ResultSetHelper.applyResultSetLong(rs, "project_payment_type_id", pBuilder::setId);
+            ResultSetHelper.applyResultSetString(rs, "name", pBuilder::setName);
+            ResultSetHelper.applyResultSetBool(rs, "mergeable", pBuilder::setMergeable);
+            ResultSetHelper.applyResultSetLong(rs, "pacts_payment_type_id", pBuilder::setPactsPaymentTypeId);
+            builder.setProjectPaymentType(pBuilder.build());
+            return builder.build();
+        });
+        responseObserver.onNext(SearchPaymentsResponse.newBuilder().addAllPayments(result).build());
         responseObserver.onCompleted();
     }
 
