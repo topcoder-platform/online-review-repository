@@ -11,6 +11,8 @@ import org.springframework.util.SerializationUtils;
 
 import com.google.protobuf.Empty;
 import com.topcoder.onlinereview.grpc.upload.proto.*;
+import com.topcoder.onlinereview.component.id.DBHelper;
+import com.topcoder.onlinereview.component.id.IDGenerator;
 import com.topcoder.onlinereview.component.search.SearchBundle;
 import com.topcoder.onlinereview.component.search.SearchBundleManager;
 import com.topcoder.onlinereview.component.search.filter.Filter;
@@ -25,6 +27,7 @@ import net.devh.boot.grpc.server.service.GrpcService;
 @GrpcService
 public class UploadService extends UploadServiceGrpc.UploadServiceImplBase {
     private final DBAccessor dbAccessor;
+    private final DBHelper dbHelper;
     private final SearchBundleManager searchBundleManager;
 
     public static final String UPLOAD_SEARCH_BUNDLE_NAME = "Upload Search Bundle";
@@ -32,9 +35,23 @@ public class UploadService extends UploadServiceGrpc.UploadServiceImplBase {
 
     private SearchBundle uploadSearchBundle;
     private SearchBundle submissionSearchBundle;
+    private IDGenerator uploadIdGenerator;
+    private IDGenerator submissionIdGenerator;
+    private IDGenerator uploadTypeIdGenerator;
+    private IDGenerator uploadStatusIdGenerator;
+    private IDGenerator submissionStatusIdGenerator;
+    private IDGenerator submissionTypeIdGenerator;
 
-    public UploadService(DBAccessor dbAccessor, SearchBundleManager searchBundleManager) {
+    public static final String UPLOAD_ID_GENERATOR_NAME = "upload_id_seq";
+    public static final String UPLOAD_TYPE_ID_GENERATOR_NAME = "upload_type_id_seq";
+    public static final String UPLOAD_STATUS_ID_GENERATOR_NAME = "upload_status_id_seq";
+    public static final String SUBMISSION_ID_GENERATOR_NAME = "submission_id_seq";
+    public static final String SUBMISSION_STATUS_ID_GENERATOR_NAME = "submission_status_id_seq";
+    public static final String SUBMISSION_TYPE_ID_GENERATOR_NAME = "submission_type_id_seq";
+
+    public UploadService(DBAccessor dbAccessor, DBHelper dbHelper, SearchBundleManager searchBundleManager) {
         this.dbAccessor = dbAccessor;
+        this.dbHelper = dbHelper;
         this.searchBundleManager = searchBundleManager;
     }
 
@@ -42,93 +59,105 @@ public class UploadService extends UploadServiceGrpc.UploadServiceImplBase {
     public void postRun() {
         uploadSearchBundle = searchBundleManager.getSearchBundle(UPLOAD_SEARCH_BUNDLE_NAME);
         submissionSearchBundle = searchBundleManager.getSearchBundle(SUBMISSION_SEARCH_BUNDLE_NAME);
+        uploadIdGenerator = new IDGenerator(UPLOAD_ID_GENERATOR_NAME, dbHelper);
+        uploadTypeIdGenerator = new IDGenerator(UPLOAD_TYPE_ID_GENERATOR_NAME, dbHelper);
+        uploadStatusIdGenerator = new IDGenerator(UPLOAD_STATUS_ID_GENERATOR_NAME, dbHelper);
+        submissionIdGenerator = new IDGenerator(SUBMISSION_ID_GENERATOR_NAME, dbHelper);
+        submissionStatusIdGenerator = new IDGenerator(SUBMISSION_STATUS_ID_GENERATOR_NAME, dbHelper);
+        submissionTypeIdGenerator = new IDGenerator(SUBMISSION_TYPE_ID_GENERATOR_NAME, dbHelper);
         SearchBundleHelper.setSearchableFields(uploadSearchBundle, SearchBundleHelper.UPLOAD_SEARCH_BUNDLE);
         SearchBundleHelper.setSearchableFields(submissionSearchBundle, SearchBundleHelper.SUBMISSION_SEARCH_BUNDLE);
     }
 
     @Override
-    public void addUploadType(EntityProto request, StreamObserver<Empty> responseObserver) {
+    public void addUploadType(EntityProto request, StreamObserver<IdProto> responseObserver) {
         validateEntityProto(request);
         String sql = """
                 INSERT INTO upload_type_lu (upload_type_id, create_user, create_date, modify_user, modify_date, name, description)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 """;
-        dbAccessor.executeUpdate(sql, request.getId(), request.getCreateUser(),
+        long newId = uploadTypeIdGenerator.getNextID();
+        dbAccessor.executeUpdate(sql, newId, request.getCreateUser(),
                 Helper.convertDate(request.getCreateDate()), request.getModifyUser(),
                 Helper.convertDate(request.getModifyDate()), request.getName(), request.getDescription());
-        responseObserver.onNext(Empty.getDefaultInstance());
+        responseObserver.onNext(IdProto.newBuilder().setId(newId).build());
         responseObserver.onCompleted();
     }
 
     @Override
-    public void addUploadStatus(EntityProto request, StreamObserver<Empty> responseObserver) {
+    public void addUploadStatus(EntityProto request, StreamObserver<IdProto> responseObserver) {
         validateEntityProto(request);
         String sql = """
                 INSERT INTO upload_status_lu (upload_status_id, create_user, create_date, modify_user, modify_date, name, description)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 """;
-        dbAccessor.executeUpdate(sql, request.getId(), request.getCreateUser(),
+        long newId = uploadStatusIdGenerator.getNextID();
+        dbAccessor.executeUpdate(sql, newId, request.getCreateUser(),
                 Helper.convertDate(request.getCreateDate()), request.getModifyUser(),
                 Helper.convertDate(request.getModifyDate()), request.getName(), request.getDescription());
-        responseObserver.onNext(Empty.getDefaultInstance());
+        responseObserver.onNext(IdProto.newBuilder().setId(newId).build());
         responseObserver.onCompleted();
     }
 
     @Override
-    public void addSubmissionType(EntityProto request, StreamObserver<Empty> responseObserver) {
+    public void addSubmissionType(EntityProto request, StreamObserver<IdProto> responseObserver) {
         validateEntityProto(request);
         String sql = """
                 INSERT INTO submission_type_lu (submission_type_id, create_user, create_date, modify_user, modify_date, name, description)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 """;
-        dbAccessor.executeUpdate(sql, request.getId(), request.getCreateUser(),
+        long newId = submissionTypeIdGenerator.getNextID();
+        dbAccessor.executeUpdate(sql, newId, request.getCreateUser(),
                 Helper.convertDate(request.getCreateDate()), request.getModifyUser(),
                 Helper.convertDate(request.getModifyDate()), request.getName(), request.getDescription());
-        responseObserver.onNext(Empty.getDefaultInstance());
+        responseObserver.onNext(IdProto.newBuilder().setId(newId).build());
         responseObserver.onCompleted();
     }
 
     @Override
-    public void addSubmissionStatus(EntityProto request, StreamObserver<Empty> responseObserver) {
+    public void addSubmissionStatus(EntityProto request, StreamObserver<IdProto> responseObserver) {
         validateEntityProto(request);
         String sql = """
                 INSERT INTO submission_status_lu (submission_status_id, create_user, create_date, modify_user, modify_date, name, description)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
                 """;
-        dbAccessor.executeUpdate(sql, request.getId(), request.getCreateUser(),
+        long newId = submissionStatusIdGenerator.getNextID();
+        dbAccessor.executeUpdate(sql, newId, request.getCreateUser(),
                 Helper.convertDate(request.getCreateDate()), request.getModifyUser(),
                 Helper.convertDate(request.getModifyDate()), request.getName(), request.getDescription());
-        responseObserver.onNext(Empty.getDefaultInstance());
+        responseObserver.onNext(IdProto.newBuilder().setId(newId).build());
         responseObserver.onCompleted();
     }
 
     @Override
-    public void addUpload(UploadProto request, StreamObserver<Empty> responseObserver) {
+    public void addUpload(UploadProto request, StreamObserver<IdProto> responseObserver) {
         validateUploadProto(request);
         String sql = """
                 INSERT INTO upload (upload_id, create_user, create_date, modify_user, modify_date, project_id, project_phase_id,
                 resource_id, upload_type_id, upload_status_id, parameter, upload_desc)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
+        long newId = uploadIdGenerator.getNextID();
         final Long projecPhaseId = Helper.extract(request::hasProjectPhaseId, request::getProjectPhaseId);
         final String uploadDesc = Helper.extract(request::hasUploadDesc, request::getUploadDesc);
-        dbAccessor.executeUpdate(sql, request.getUploadId(), request.getCreateUser(),
+        dbAccessor.executeUpdate(sql, newId, request.getCreateUser(),
                 Helper.convertDate(request.getCreateDate()), request.getModifyUser(),
                 Helper.convertDate(request.getModifyDate()), request.getProjectId(), projecPhaseId,
                 request.getResourceId(), request.getUploadTypeId(), request.getUploadStatusId(), request.getParameter(),
                 uploadDesc);
-        responseObserver.onNext(Empty.getDefaultInstance());
+        responseObserver.onNext(IdProto.newBuilder().setId(newId).build());
         responseObserver.onCompleted();
     }
 
     @Override
-    public void addSubmission(SubmissionProto request, StreamObserver<Empty> responseObserver) {
+    public void addSubmission(SubmissionProto request, StreamObserver<IdProto> responseObserver) {
         validateSubmissionProto(request);
         String sql = """
                 INSERT INTO submission (submission_id, create_user, create_date, modify_user, modify_date, submission_status_id,
                 submission_type_id, screening_score, initial_score, final_score, placement, user_rank, mark_for_purchase, prize_id, upload_id, thurgood_job_id)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """;
+        long newId = submissionIdGenerator.getNextID();
         final Double screeningScore = Helper.extract(request::hasScreeningScore, request::getScreeningScore);
         final Double initialScore = Helper.extract(request::hasInitialScore, request::getInitialScore);
         final Double finalScore = Helper.extract(request::hasFinalScore, request::getFinalScore);
@@ -137,12 +166,12 @@ public class UploadService extends UploadServiceGrpc.UploadServiceImplBase {
         final Boolean markForPurchase = Helper.extract(request::hasMarkForPurchase, request::getMarkForPurchase);
         final Long prizeId = Helper.extract(request::hasPrizeId, request::getPrizeId);
         final String thurgoodJobId = Helper.extract(request::hasThurgoodJobId, request::getThurgoodJobId);
-        dbAccessor.executeUpdate(sql, request.getSubmissionId(), request.getCreateUser(),
+        dbAccessor.executeUpdate(sql, newId, request.getCreateUser(),
                 Helper.convertDate(request.getCreateDate()), request.getModifyUser(),
                 Helper.convertDate(request.getModifyDate()), request.getSubmissionStatusId(),
                 request.getSubmissionTypeId(), screeningScore, initialScore, finalScore, placement, userRank,
                 markForPurchase, prizeId, request.getUploadId(), thurgoodJobId);
-        responseObserver.onNext(Empty.getDefaultInstance());
+        responseObserver.onNext(IdProto.newBuilder().setId(newId).build());
         responseObserver.onCompleted();
     }
 
@@ -600,9 +629,12 @@ public class UploadService extends UploadServiceGrpc.UploadServiceImplBase {
     }
 
     private void validateEntityProto(EntityProto request) {
+        Helper.assertObjectNotNull(request::hasName, "name");
+        Helper.assertObjectNotNull(request::hasDescription, "description");
         Helper.assertObjectNotNull(request::hasCreateUser, "create_user");
         Helper.assertObjectNotNull(request::hasCreateDate, "create_date");
-        validateEntityProtoForUpdate(request);
+        Helper.assertObjectNotNull(request::hasModifyUser, "modify_user");
+        Helper.assertObjectNotNull(request::hasModifyDate, "modify_date");
     }
 
     private void validateEntityProtoForUpdate(EntityProto request) {
