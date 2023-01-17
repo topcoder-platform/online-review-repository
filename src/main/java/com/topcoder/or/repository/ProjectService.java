@@ -594,6 +594,89 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
         responseObserver.onCompleted();
     }
 
+    @Override
+    public void getAllProjectLinkTypes(Empty request, StreamObserver<GetAllProjectLinkTypesResponse> responseObserver) {
+        String sql = """
+                SELECT link_type_id, link_type_name, allow_overlap
+                FROM link_type_lu
+                """;
+        List<ProjectLinkTypeProto> result = dbAccessor.executeQuery(sql, (rs, _id) -> {
+            ProjectLinkTypeProto.Builder builder = ProjectLinkTypeProto.newBuilder();
+            ResultSetHelper.applyResultSetLong(rs, 1, builder::setLinkTypeId);
+            ResultSetHelper.applyResultSetString(rs, 2, builder::setLinkTypeName);
+            ResultSetHelper.applyResultSetBool(rs, 3, builder::setAllowOverlap);
+            return builder.build();
+        });
+        responseObserver.onNext(GetAllProjectLinkTypesResponse.newBuilder().addAllProjectLinkTypes(result).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void getDestProjectLinks(GetDestProjectLinksRequest request,
+            StreamObserver<GetDestProjectLinksResponse> responseObserver) {
+        validateGetDestProjectLinksRequest(request);
+        String sql = """
+                SELECT source_project_id, dest_project_id, link_type_id
+                FROM linked_project_xref
+                WHERE source_project_id = ?
+                """;
+        List<ProjectLinkProto> result = dbAccessor.executeQuery(sql, (rs, _id) -> {
+            ProjectLinkProto.Builder builder = ProjectLinkProto.newBuilder();
+            ResultSetHelper.applyResultSetLong(rs, 1, builder::setSourceProjectId);
+            ResultSetHelper.applyResultSetLong(rs, 2, builder::setDestProjectId);
+            ResultSetHelper.applyResultSetLong(rs, 3, builder::setLinkTypeId);
+            return builder.build();
+        }, request.getSourceProjectId());
+        responseObserver.onNext(GetDestProjectLinksResponse.newBuilder().addAllProjectLinks(result).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void getSourceProjectLinks(GetSourceProjectLinksRequest request,
+            StreamObserver<GetSourceProjectLinksResponse> responseObserver) {
+        validateGetSourceProjectLinksRequest(request);
+        String sql = """
+                SELECT source_project_id, dest_project_id, link_type_id
+                FROM linked_project_xref
+                WHERE dest_project_id = ?
+                """;
+        List<ProjectLinkProto> result = dbAccessor.executeQuery(sql, (rs, _id) -> {
+            ProjectLinkProto.Builder builder = ProjectLinkProto.newBuilder();
+            ResultSetHelper.applyResultSetLong(rs, 1, builder::setSourceProjectId);
+            ResultSetHelper.applyResultSetLong(rs, 2, builder::setDestProjectId);
+            ResultSetHelper.applyResultSetLong(rs, 3, builder::setLinkTypeId);
+            return builder.build();
+        }, request.getDestProjectId());
+        responseObserver.onNext(GetSourceProjectLinksResponse.newBuilder().addAllProjectLinks(result).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void deleteProjectLinksBySourceId(DeleteProjectLinksBySourceIdRequest request,
+            StreamObserver<CountProto> responseObserver) {
+        validateDeleteProjectLinksBySourceIdRequest(request);
+        String sql = """
+                DELETE FROM linked_project_xref
+                WHERE source_project_id = ?
+                """;
+        int affected = dbAccessor.executeUpdate(sql, request.getSourceProjectId());
+        responseObserver.onNext(CountProto.newBuilder().setCount(affected).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void createProjectLink(ProjectLinkProto request, StreamObserver<CountProto> responseObserver) {
+        validateProjectLinkProto(request);
+        String sql = """
+                INSERT INTO linked_project_xref(source_project_id,dest_project_id,link_type_id)
+                VALUES(?,?,?)
+                """;
+        int affected = dbAccessor.executeUpdate(sql, request.getSourceProjectId(), request.getDestProjectId(),
+                request.getLinkTypeId());
+        responseObserver.onNext(CountProto.newBuilder().setCount(affected).build());
+        responseObserver.onCompleted();
+    }
+
     private List<ProjectProto.Builder> getProjects(List<Long> projectIds) {
         String sql = """
                 SELECT project.project_id, status.project_status_id, status.name as status_name, category.project_category_id,
@@ -1412,6 +1495,24 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
         Helper.assertObjectNotNull(prize::hasPrizeAmount, "prize_amount");
         Helper.assertObjectNotNull(prize.getPrizeType()::hasId, "prize_type_id");
         Helper.assertObjectNotNull(prize::hasNumberOfSubmissions, "number_of_submissions");
+    }
+
+    private void validateGetDestProjectLinksRequest(GetDestProjectLinksRequest request) {
+        Helper.assertObjectNotNull(request::hasSourceProjectId, "source_project_id");
+    }
+
+    private void validateGetSourceProjectLinksRequest(GetSourceProjectLinksRequest request) {
+        Helper.assertObjectNotNull(request::hasDestProjectId, "dest_project_id");
+    }
+
+    private void validateDeleteProjectLinksBySourceIdRequest(DeleteProjectLinksBySourceIdRequest request) {
+        Helper.assertObjectNotNull(request::hasSourceProjectId, "source_project_id");
+    }
+
+    private void validateProjectLinkProto(ProjectLinkProto request) {
+        Helper.assertObjectNotNull(request::hasDestProjectId, "dest_project_id");
+        Helper.assertObjectNotNull(request::hasSourceProjectId, "source_project_id");
+        Helper.assertObjectNotNull(request::hasLinkTypeId, "link_type_id");
     }
     /* #endregion */
 }
