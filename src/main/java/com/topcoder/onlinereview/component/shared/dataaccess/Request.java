@@ -6,8 +6,10 @@ import java.util.Properties;
 import java.util.TreeMap;
 
 /**
- * This class is a generic request-bean. It serves as a container for all information that is parsed
- * out of the request. Note that each key must be unique so if you have 2 coder ids, you need coderA
+ * This class is a generic request-bean. It serves as a container for all
+ * information that is parsed
+ * out of the request. Note that each key must be unique so if you have 2 coder
+ * ids, you need coderA
  * and coderB.
  *
  * @author tbone
@@ -27,7 +29,8 @@ public class Request implements RequestInt {
   }
 
   /**
-   * Constructor that takes a map and sets this object's properties using that map.
+   * Constructor that takes a map and sets this object's properties using that
+   * map.
    *
    * @param map
    * @throws Exception
@@ -65,8 +68,10 @@ public class Request implements RequestInt {
       if (me.getValue() instanceof String) {
         sKey = me.getKey().toString(); // maps can't have null-key
         sValue = (String) me.getValue();
-        if (sKey.equals(DataAccessConstants.COMMAND)) setContentHandle(sValue);
-        else if (sValue != null) mProp.put(sKey, sValue);
+        if (sKey.equals(DataAccessConstants.COMMAND))
+          setContentHandle(sValue);
+        else if (sValue != null)
+          mProp.put(sKey, sValue);
       } else if (me.getValue().getClass().isArray()) {
         arrayType = me.getValue().getClass().getComponentType().toString();
         // only need to handle String arrays afaik.
@@ -74,11 +79,14 @@ public class Request implements RequestInt {
           sArray = (String[]) me.getValue();
           sKey = me.getKey().toString();
           if (sArray.length > 0) {
-            if (sKey.equals(DataAccessConstants.COMMAND)) setContentHandle(sArray[0]);
-            else if (sArray[0] != null) mProp.put(sKey, sArray[0]);
+            if (sKey.equals(DataAccessConstants.COMMAND))
+              setContentHandle(sArray[0]);
+            else if (sArray[0] != null)
+              mProp.put(sKey, sArray[0]);
           }
           for (int i = 1; i < sArray.length; i++) {
-            if (sArray[i] != null) mProp.put(sKey + i, sArray[i]);
+            if (sArray[i] != null)
+              mProp.put(sKey + i, sArray[i]);
           }
         }
       } else {
@@ -119,7 +127,7 @@ public class Request implements RequestInt {
   /**
    * Gets a specific property for this request bean
    *
-   * @param sKey the key for the property
+   * @param sKey          the key for the property
    * @param sDefaultValue the default value if null
    * @return String the value of the property
    */
@@ -135,11 +143,13 @@ public class Request implements RequestInt {
    */
   public void setProperty(String sKey, String sVal) {
     mProp.setProperty(sKey, sVal);
-    if (sKey.equals(DataAccessConstants.COMMAND)) msContentHandle = sVal;
+    if (sKey.equals(DataAccessConstants.COMMAND))
+      msContentHandle = sVal;
   }
 
   /**
-   * Implementation of toString, it includes each of the key/value pairs from the properties object
+   * Implementation of toString, it includes each of the key/value pairs from the
+   * properties object
    * of this object.
    *
    * @return a string representation of this object
@@ -149,7 +159,8 @@ public class Request implements RequestInt {
   }
 
   /**
-   * Generate a string from this object sutable for using as a key for some key/value pair
+   * Generate a string from this object sutable for using as a key for some
+   * key/value pair
    * construct.
    *
    * @return
@@ -161,7 +172,7 @@ public class Request implements RequestInt {
     // we want the cache to pick it up regardless of order
     TreeMap t = new TreeMap(mProp);
 
-    for (Iterator it = t.entrySet().iterator(); it.hasNext(); ) {
+    for (Iterator it = t.entrySet().iterator(); it.hasNext();) {
       me = (Map.Entry) it.next();
       sb.append(me.getKey().toString());
       sb.append("=");
