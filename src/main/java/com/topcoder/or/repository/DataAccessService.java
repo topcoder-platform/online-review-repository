@@ -1,6 +1,7 @@
 package com.topcoder.or.repository;
 
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
@@ -415,6 +416,214 @@ public class DataAccessService extends DataAccessServiceGrpc.DataAccessServiceIm
         responseObserver.onCompleted();
     }
 
+    @Override
+    public void checkUserChallengeEligibility(CheckUserChallengeEligibilityRequest request,
+            StreamObserver<CheckUserChallengeEligibilityResponse> responseObserver) {
+        validateCheckUserChallengeEligibilityRequest(request);
+        DataAccess dataAccess = new DataAccess(dbAccessor, dbAccessor.getOltpJdbcTemplate());
+        Request dbRequest = new Request();
+        String queryName = "get_challenge_accessibility_and_groups";
+        dbRequest.setContentHandle(queryName);
+        dbRequest.setProperty("userId", String.valueOf(request.getUserId()));
+        dbRequest.setProperty("challengeId", String.valueOf(request.getChallengeId()));
+        Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
+        List<Map<String, Object>> data = result.get(queryName);
+        CheckUserChallengeEligibilityResponse response;
+        if (data != null && data.isEmpty()) {
+            response = CheckUserChallengeEligibilityResponse.getDefaultInstance();
+        } else {
+            CheckUserChallengeEligibilityResponse.Builder builder = CheckUserChallengeEligibilityResponse.newBuilder();
+            Long userGroupXrefFound = Helper.getLong(data.get(0), "user_group_xref_found");
+            if (userGroupXrefFound != null) {
+                builder.setUserGroupXrefFound(userGroupXrefFound);
+            }
+            Long challengeGroupInd = Helper.getLong(data.get(0), "challenge_group_ind");
+            if (challengeGroupInd != null) {
+                builder.setChallengeGroupInd(challengeGroupInd);
+            }
+            Long groupId = Helper.getLong(data.get(0), "group_id");
+            if (groupId != null) {
+                builder.setGroupId(groupId);
+            }
+            response = builder.build();
+        }
+        responseObserver.onNext(response);
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void searchProjectPhases(SearchProjectPhasesRequest request,
+            StreamObserver<SearchProjectPhasesResponse> responseObserver) {
+        validateSearchProjectPhasesRequest(request);
+        DataAccess dataAccess = new DataAccess(dbAccessor, dbAccessor.getTcsJdbcTemplate());
+        Request dbRequest = new Request();
+        String queryName;
+        String paramName;
+        switch (request.getParameterValue()) {
+            case SearchProjectsParameter.STATUS_ID_VALUE: {
+                queryName = "tcs_project_phases_by_status";
+                paramName = "stid";
+                break;
+            }
+            case SearchProjectsParameter.USER_ID_VALUE: {
+                queryName = "tcs_project_phases_by_user";
+                paramName = "uid";
+                break;
+            }
+            default: {
+                queryName = "tcs_project_phases_by_status";
+                paramName = "stid";
+                break;
+            }
+        }
+        dbRequest.setContentHandle(queryName);
+        dbRequest.setProperty(paramName, request.getValue());
+        Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
+        List<Map<String, Object>> data = result.get(queryName);
+        List<ProjectPhaseProto> phases = new ArrayList<>();
+        for (int i = 0; i < data.size(); i++) {
+            ProjectPhaseProto.Builder builder = ProjectPhaseProto.newBuilder();
+            builder.setProjectId(Helper.getLong(data.get(i), "project_id"));
+            builder.setProjectPhaseId(Helper.getLong(data.get(i), "project_phase_id"));
+            builder.setDuration(Helper.getLong(data.get(i), "duration"));
+            Date fixedStartTime = Helper.getDate(data.get(i), "fixed_start_time");
+            if (fixedStartTime != null) {
+                builder.setFixedStartTime(
+                        Timestamp.newBuilder().setSeconds(fixedStartTime.toInstant().getEpochSecond()));
+            }
+            Date scheduledStartTime = Helper.getDate(data.get(i), "scheduled_start_time");
+            if (scheduledStartTime != null) {
+                builder.setScheduledStartTime(
+                        Timestamp.newBuilder().setSeconds(scheduledStartTime.toInstant().getEpochSecond()));
+            }
+            Date scheduledEndTime = Helper.getDate(data.get(i), "scheduled_end_time");
+            if (scheduledEndTime != null) {
+                builder.setScheduledEndTime(
+                        Timestamp.newBuilder().setSeconds(scheduledEndTime.toInstant().getEpochSecond()));
+            }
+            Date actualStartTime = Helper.getDate(data.get(i), "actual_start_time");
+            if (actualStartTime != null) {
+                builder.setActualStartTime(
+                        Timestamp.newBuilder().setSeconds(actualStartTime.toInstant().getEpochSecond()));
+            }
+            Date actualEndTime = Helper.getDate(data.get(i), "actual_end_time");
+            if (actualEndTime != null) {
+                builder.setActualEndTime(
+                        Timestamp.newBuilder().setSeconds(actualEndTime.toInstant().getEpochSecond()));
+            }
+            Long phaseStatusId = Helper.getLong(data.get(i), "phase_status_id");
+            if (phaseStatusId != null) {
+                builder.setPhaseStatusId(phaseStatusId);
+            }
+            Long phaseTypeId = Helper.getLong(data.get(i), "phase_type_id");
+            if (phaseTypeId != null) {
+                builder.setPhaseTypeId(phaseTypeId);
+            }
+            Long dependencyPhaseId = Helper.getLong(data.get(i), "dependency_phase_id");
+            if (dependencyPhaseId != null) {
+                builder.setDependencyPhaseId(dependencyPhaseId);
+            }
+            Long dependentPhaseId = Helper.getLong(data.get(i), "dependent_phase_id");
+            if (dependentPhaseId != null) {
+                builder.setDependentPhaseId(dependentPhaseId);
+            }
+            Long lagTime = Helper.getLong(data.get(i), "lag_time");
+            if (lagTime != null) {
+                builder.setLagTime(lagTime);
+            }
+            builder.setDependencyStart(Helper.getInt(data.get(i), "dependency_start") == 1);
+            builder.setDependentStart(Helper.getInt(data.get(i), "dependent_start") == 1);
+            phases.add(builder.build());
+        }
+        responseObserver.onNext(
+                SearchProjectPhasesResponse.newBuilder().addAllPhases(phases).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void searchUserResourcesByUserId(SearchUserResourcesByUserIdRequest request,
+            StreamObserver<SearchUserResourcesResponse> responseObserver) {
+        validateSearchUserResourcesByUserIdRequest(request);
+        DataAccess dataAccess = new DataAccess(dbAccessor, dbAccessor.getTcsJdbcTemplate());
+        Request dbRequest = new Request();
+        String queryName = "tcs_global_resources_by_user";
+        dbRequest.setContentHandle(queryName);
+        dbRequest.setProperty("uid", String.valueOf(request.getUserId()));
+        Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
+        List<Map<String, Object>> data = result.get(queryName);
+        List<Map<String, Object>> infoData = result.get("tcs_global_resource_infos_by_user");
+        responseObserver.onNext(getResourcesResponse(data, infoData));
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void searchUserResourcesByUserIdAndStatus(SearchUserResourcesByUserIdAndStatusRequest request,
+            StreamObserver<SearchUserResourcesResponse> responseObserver) {
+        validateSearchUserResourcesByUserIdAndStatusRequest(request);
+        DataAccess dataAccess = new DataAccess(dbAccessor, dbAccessor.getTcsJdbcTemplate());
+        Request dbRequest = new Request();
+        String queryName = "tcs_resources_by_user_and_status";
+        dbRequest.setContentHandle(queryName);
+        dbRequest.setProperty("uid", String.valueOf(request.getUserId()));
+        dbRequest.setProperty("stid", String.valueOf(request.getStatusId()));
+        Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
+        List<Map<String, Object>> data = result.get(queryName);
+        List<Map<String, Object>> infoData = result.get("tcs_resource_infos_by_user_and_status");
+        responseObserver.onNext(getResourcesResponse(data, infoData));
+        responseObserver.onCompleted();
+    }
+
+    private SearchUserResourcesResponse getResourcesResponse(List<Map<String, Object>> data,
+            List<Map<String, Object>> infoData) {
+        List<ResourceProto> resources = new ArrayList<>();
+        for (int i = 0; i < data.size(); i++) {
+            ResourceProto.Builder builder = ResourceProto.newBuilder();
+            builder.setResourceId(Helper.getLong(data.get(i), "resource_id"));
+            builder.setResourceRoleId(Helper.getLong(data.get(i), "resource_role_id"));
+            Long projectId = Helper.getLong(data.get(i), "project_id");
+            if (projectId != null) {
+                builder.setProjectId(projectId);
+            }
+            Long phaseId = Helper.getLong(data.get(i), "phase_id");
+            if (phaseId != null) {
+                builder.setPhaseId(phaseId);
+            }
+            String createUser = Helper.getString(data.get(i), "create_user");
+            if (createUser != null) {
+                builder.setCreateUser(createUser);
+            }
+            Date createDate = Helper.getDate(data.get(i), "create_date");
+            if (createDate != null) {
+                builder.setCreateDate(Timestamp.newBuilder().setSeconds(createDate.toInstant().getEpochSecond()));
+            }
+            String modifyUser = Helper.getString(data.get(i), "modify_user");
+            if (modifyUser != null) {
+                builder.setModifyUser(modifyUser);
+            }
+            Date modifyDate = Helper.getDate(data.get(i), "modify_date");
+            if (modifyDate != null) {
+                builder.setModifyDate(Timestamp.newBuilder().setSeconds(modifyDate.toInstant().getEpochSecond()));
+            }
+            resources.add(builder.build());
+        }
+        List<ResourceInfoProto> resourceIfos = new ArrayList<>();
+        for (int i = 0; i < infoData.size(); i++) {
+            ResourceInfoProto.Builder builder = ResourceInfoProto.newBuilder();
+            builder.setResourceId(Helper.getLong(infoData.get(i), "resource_id"));
+            String propName = Helper.getString(infoData.get(i), "resource_info_type_name");
+            if (propName != null) {
+                builder.setResourceInfoTypeName(propName);
+            }
+            String value = Helper.getString(infoData.get(i), "value");
+            if (value != null) {
+                builder.setValue(value);
+            }
+            resourceIfos.add(builder.build());
+        }
+        return SearchUserResourcesResponse.newBuilder().addAllResources(resources).addAllResourceInfos(resourceIfos)
+                .build();
+    }
+
     private long generateNextCatalogScopedId() {
         try {
             if (!IdGenerator.isInitialized()) {
@@ -474,5 +683,24 @@ public class DataAccessService extends DataAccessServiceGrpc.DataAccessServiceIm
 
     private void validateGetProjectClientRequest(GetProjectClientRequest request) {
         Helper.assertObjectNotNull(request::hasDirectProjectId, "direct_project_id");
+    }
+
+    private void validateCheckUserChallengeEligibilityRequest(CheckUserChallengeEligibilityRequest request) {
+        Helper.assertObjectNotNull(request::hasUserId, "user_id");
+        Helper.assertObjectNotNull(request::hasChallengeId, "challenge_id");
+    }
+
+    private void validateSearchProjectPhasesRequest(SearchProjectPhasesRequest request) {
+        Helper.assertObjectNotNull(request::hasValue, "value");
+    }
+
+    private void validateSearchUserResourcesByUserIdRequest(SearchUserResourcesByUserIdRequest request) {
+        Helper.assertObjectNotNull(request::hasUserId, "user_id");
+    }
+
+    private void validateSearchUserResourcesByUserIdAndStatusRequest(
+            SearchUserResourcesByUserIdAndStatusRequest request) {
+        Helper.assertObjectNotNull(request::hasUserId, "user_id");
+        Helper.assertObjectNotNull(request::hasStatusId, "status_id");
     }
 }
