@@ -82,7 +82,7 @@ public class PhaseService extends PhaseServiceGrpc.PhaseServiceImplBase {
             ResultSetHelper.applyResultSetString(rs, 9, builder::setModifyUser);
             ResultSetHelper.applyResultSetTimestamp(rs, 10, builder::setModifyDate);
             ResultSetHelper.applyResultSetLong(rs, 11, builder::setPhaseTypeId);
-            ResultSetHelper.applyResultSetString(rs, 12, builder::setPhaseStatusName);
+            ResultSetHelper.applyResultSetString(rs, 12, builder::setPhaseTypeName);
             ResultSetHelper.applyResultSetLong(rs, 13, builder::setPhaseStatusId);
             ResultSetHelper.applyResultSetString(rs, 14, builder::setPhaseStatusName);
             return builder.build();

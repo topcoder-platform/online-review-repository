@@ -579,11 +579,12 @@ public class DataRetriever {
           sb.append('|');
         }
       }
-      dbAccessor.executeQuery(
+      dbAccessor.executeUpdate(
           jdbcTemplate,
           "insert into command_execution (command_id, execution_time, inputs) values (?, ?, ?)",
           commandId, time, sb.toString());
     } catch (DataAccessException e) {
+      e.printStackTrace();
       log.error("Couldn't insert row to track the execution of command " + commandId);
     }
   }

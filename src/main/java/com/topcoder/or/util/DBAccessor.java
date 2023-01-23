@@ -113,7 +113,7 @@ public class DBAccessor {
             throws DataAccessException {
         logger.info("executeUpdate: " + query);
         GeneratedKeyHolder generatedKeyHolder = new GeneratedKeyHolder();
-        tcsJdbcTemplate.update(psc, generatedKeyHolder);
+        jdbcTemplate.update(psc, generatedKeyHolder);
         return generatedKeyHolder.getKey();
     }
 

@@ -209,7 +209,8 @@ public class ResourceService extends ResourceServiceGrpc.ResourceServiceImplBase
                 FROM notification
                 WHERE project_id = ? AND external_ref_id = ? AND notification_type_id = ?
                 """;
-        List<NotificationProto> result = dbAccessor.executeQuery(sql, (rs, _i) -> loadNotification(rs));
+        List<NotificationProto> result = dbAccessor.executeQuery(sql, (rs, _i) -> loadNotification(rs),
+                request.getProjectId(), request.getExternalRefId(), request.getNotificationTypeId());
         responseObserver.onNext(result.isEmpty() ? NotificationProto.getDefaultInstance() : result.get(0));
         responseObserver.onCompleted();
     }
@@ -246,7 +247,8 @@ public class ResourceService extends ResourceServiceGrpc.ResourceServiceImplBase
                 FROM notification_type_lu
                 WHERE notification_type_id = ?
                 """;
-        List<NotificationTypeProto> result = dbAccessor.executeQuery(sql, (rs, _i) -> loadNotificationType(rs));
+        List<NotificationTypeProto> result = dbAccessor.executeQuery(sql, (rs, _i) -> loadNotificationType(rs),
+                request.getNotificationTypeId());
         responseObserver.onNext(result.isEmpty() ? NotificationTypeProto.getDefaultInstance() : result.get(0));
         responseObserver.onCompleted();
     }
@@ -262,7 +264,7 @@ public class ResourceService extends ResourceServiceGrpc.ResourceServiceImplBase
                 """;
         String inSql = Helper.getInClause(request.getNotificationTypeIdsCount());
         List<NotificationTypeProto> result = dbAccessor.executeQuery(sql.formatted(inSql),
-                (rs, _i) -> loadNotificationType(rs));
+                (rs, _i) -> loadNotificationType(rs), request.getNotificationTypeIdsList().toArray());
         responseObserver.onNext(GetNotificationTypesResponse.newBuilder().addAllNotificationTypes(result).build());
         responseObserver.onCompleted();
     }

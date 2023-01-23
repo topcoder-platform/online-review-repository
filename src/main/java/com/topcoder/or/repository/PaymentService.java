@@ -3,6 +3,7 @@ package com.topcoder.or.repository;
 import java.math.BigDecimal;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
+import java.sql.Types;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -52,14 +53,24 @@ public class PaymentService extends PaymentServiceGrpc.PaymentServiceImplBase {
         final BigDecimal amount = Helper.extractBigDecimal(p::hasAmount, p::getAmount);
         final Long pactPaymentId = Helper.extract(p::hasPactsPaymentId, p::getPactsPaymentId);
         final Long submissionId = Helper.extract(p::hasSubmissionId, p::getSubmissionId);
+        System.console().printf(amount.toString());
         Number id = dbAccessor.executeUpdateReturningKey(sql, conn -> {
             PreparedStatement ps = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS);
             ps.setLong(1, p.getResourceId());
-            ps.setLong(2, submissionId);
+            if (submissionId == null) {
+                ps.setNull(2, Types.BIGINT);
+            } else {
+                ps.setLong(2, submissionId);
+            }
             ps.setBigDecimal(3, amount);
-            ps.setLong(4, pactPaymentId);
+            if (pactPaymentId == null) {
+                ps.setNull(4, Types.BIGINT);
+            } else {
+                ps.setLong(4, pactPaymentId);
+            }
             ps.setString(5, request.getOperator());
             ps.setString(6, request.getOperator());
+            ps.setLong(7, p.getProjectPaymentType().getId());
             return ps;
         });
         responseObserver.onNext(IdProto.newBuilder().setId(id.longValue()).build());
@@ -321,7 +332,7 @@ public class PaymentService extends PaymentServiceGrpc.PaymentServiceImplBase {
         Helper.assertObjectNotNullAndPositive(p::hasResourceId, p::getResourceId, "resource_id");
         Helper.assertObjectNotNull(p::hasProjectPaymentType, "project_payment_type");
         ProjectPaymentTypeProto pp = p.getProjectPaymentType();
-        Helper.assertObjectNotNullAndPositive(pp::hasId, p::getId, "project_payment_type_id");
+        Helper.assertObjectNotNullAndPositive(pp::hasId, pp::getId, "project_payment_type_id");
     }
 
     private void validateUpdatePaymentRequest(UpdatePaymentRequest request) {
@@ -332,7 +343,7 @@ public class PaymentService extends PaymentServiceGrpc.PaymentServiceImplBase {
         Helper.assertObjectNotNullAndPositive(p::hasResourceId, p::getResourceId, "resource_id");
         Helper.assertObjectNotNull(p::hasProjectPaymentType, "project_payment_type");
         ProjectPaymentTypeProto pp = p.getProjectPaymentType();
-        Helper.assertObjectNotNullAndPositive(pp::hasId, p::getId, "project_payment_type_id");
+        Helper.assertObjectNotNullAndPositive(pp::hasId, pp::getId, "project_payment_type_id");
     }
 
     private void validateProjectPaymentAdjustmentProto(ProjectPaymentAdjustmentProto request) {

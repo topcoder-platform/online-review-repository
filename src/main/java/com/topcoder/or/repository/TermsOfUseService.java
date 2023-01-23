@@ -76,19 +76,20 @@ public class TermsOfUseService extends TermsOfUseServiceGrpc.TermsOfUseServiceIm
                 WHERE project_id = ? AND resource_role_id = ?
                 order by group_ind, sort_order
                 """;
-        List<ProjectRoleTermsOfUseProto> result = dbAccessor.executeQuery(sql, (rs, _i) -> {
-            ProjectRoleTermsOfUseProto.Builder builder = ProjectRoleTermsOfUseProto.newBuilder();
-            ResultSetHelper.applyResultSetLong(rs, 1, builder::setTermsOfUseId);
-            ResultSetHelper.applyResultSetInt(rs, 2, builder::setSortOrder);
-            ResultSetHelper.applyResultSetInt(rs, 3, builder::setGroupInd);
-            ResultSetHelper.applyResultSetInt(rs, 4, builder::setTermsOfUseTypeId);
-            ResultSetHelper.applyResultSetString(rs, 5, builder::setTitle);
-            ResultSetHelper.applyResultSetString(rs, 6, builder::setUrl);
-            ResultSetHelper.applyResultSetInt(rs, 7, builder::setTermsOfUseAgreeabilityTypeId);
-            ResultSetHelper.applyResultSetString(rs, 8, builder::setTermsOfUseAgreeabilityTypeName);
-            ResultSetHelper.applyResultSetString(rs, 9, builder::setTermsOfUseAgreeabilityTypeDescription);
-            return builder.build();
-        }, request.getProjectId(), request.getResourceRoleId());
+        List<ProjectRoleTermsOfUseProto> result = dbAccessor.executeQuery(dbAccessor.getCommonJdbcTemplate(), sql,
+                (rs, _i) -> {
+                    ProjectRoleTermsOfUseProto.Builder builder = ProjectRoleTermsOfUseProto.newBuilder();
+                    ResultSetHelper.applyResultSetLong(rs, 1, builder::setTermsOfUseId);
+                    ResultSetHelper.applyResultSetInt(rs, 2, builder::setSortOrder);
+                    ResultSetHelper.applyResultSetInt(rs, 3, builder::setGroupInd);
+                    ResultSetHelper.applyResultSetInt(rs, 4, builder::setTermsOfUseTypeId);
+                    ResultSetHelper.applyResultSetString(rs, 5, builder::setTitle);
+                    ResultSetHelper.applyResultSetString(rs, 6, builder::setUrl);
+                    ResultSetHelper.applyResultSetInt(rs, 7, builder::setTermsOfUseAgreeabilityTypeId);
+                    ResultSetHelper.applyResultSetString(rs, 8, builder::setTermsOfUseAgreeabilityTypeName);
+                    ResultSetHelper.applyResultSetString(rs, 9, builder::setTermsOfUseAgreeabilityTypeDescription);
+                    return builder.build();
+                }, request.getProjectId(), request.getResourceRoleId());
         responseObserver
                 .onNext(GetProjectRoleTermsOfUseResponse.newBuilder().addAllProjectRoleTermsOfUses(result).build());
         responseObserver.onCompleted();
