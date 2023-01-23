@@ -10,6 +10,7 @@ import com.topcoder.onlinereview.component.shared.dataaccess.Request;
 import com.topcoder.onlinereview.grpc.webcommon.proto.*;
 import com.topcoder.or.util.DBAccessor;
 import com.topcoder.or.util.Helper;
+import com.topcoder.or.util.ResultSetHelper;
 
 import io.grpc.stub.StreamObserver;
 import net.devh.boot.grpc.server.service.GrpcService;
@@ -253,6 +254,39 @@ public class WebCommonService extends WebCommonServiceGrpc.WebCommonServiceImplB
             }
         }
         responseObserver.onNext(response.build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void getDataTypeMappings(Empty request, StreamObserver<GetDataTypeMappingsResponse> responseObserver) {
+        String sql = """
+                SELECT data_type_id, language_id, display_value
+                FROM data_type_mapping
+                """;
+        List<DataTypeMappingProto> result = dbAccessor.executeQuery(dbAccessor.getOltpJdbcTemplate(), sql, (rs, _i) -> {
+            DataTypeMappingProto.Builder builder = DataTypeMappingProto.newBuilder();
+            ResultSetHelper.applyResultSetString(rs, 1, builder::setDataTypeId);
+            ResultSetHelper.applyResultSetString(rs, 2, builder::setLanguageId);
+            ResultSetHelper.applyResultSetString(rs, 3, builder::setDisplayValue);
+            return builder.build();
+        });
+        responseObserver.onNext(GetDataTypeMappingsResponse.newBuilder().addAllDataTypeMappings(result).build());
+        responseObserver.onCompleted();
+    }
+
+    @Override
+    public void getDataTypes(Empty request, StreamObserver<GetDataTypesResponse> responseObserver) {
+        String sql = """
+                SELECT data_type_id, data_type_desc
+                FROM data_type
+                """;
+        List<DataTypeProto> result = dbAccessor.executeQuery(dbAccessor.getOltpJdbcTemplate(), sql, (rs, _i) -> {
+            DataTypeProto.Builder builder = DataTypeProto.newBuilder();
+            ResultSetHelper.applyResultSetInt(rs, 1, builder::setDataTypeId);
+            ResultSetHelper.applyResultSetString(rs, 2, builder::setDataTypeDesc);
+            return builder.build();
+        });
+        responseObserver.onNext(GetDataTypesResponse.newBuilder().addAllDataTypes(result).build());
         responseObserver.onCompleted();
     }
 
