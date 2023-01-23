@@ -18,7 +18,9 @@ import com.topcoder.or.util.Helper;
 import com.topcoder.or.util.ResultSetHelper;
 
 import io.grpc.stub.StreamObserver;
+import net.devh.boot.grpc.server.service.GrpcService;
 
+@GrpcService
 public class PhaseService extends PhaseServiceGrpc.PhaseServiceImplBase {
     private final DBAccessor dbAccessor;
     private final DBHelper dbHelper;

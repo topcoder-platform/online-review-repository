@@ -9,7 +9,9 @@ import com.topcoder.or.util.Helper;
 import com.topcoder.or.util.ResultSetHelper;
 
 import io.grpc.stub.StreamObserver;
+import net.devh.boot.grpc.server.service.GrpcService;
 
+@GrpcService
 public class UserRetrievalService extends UserRetrievalServiceGrpc.UserRetrievalServiceImplBase {
     private final DBAccessor dbAccessor;
 
