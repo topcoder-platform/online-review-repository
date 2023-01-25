@@ -168,8 +168,11 @@ public class SecurityService extends SecurityServiceGrpc.SecurityServiceImplBase
             StreamObserver<GetBillingAccountResponse> responseObserver) {
         validateGetBillingAccountRequest(request);
         String sql = """
-                select project_id, company_id, name, description, client_id, is_deleted
-                from tt_project where project_id = ? and is_deleted = 0
+                select tp.project_id, tp.company_id, tp.name, tp.description, tp.client_id, tp.is_deleted,
+                c.company_id as client_company_id, c.name as client_name, c.is_deleted as client_is_deleted
+                from tt_project tp
+                left join client c on c.client_id = tp.client_id
+                where tp.project_id = ? and tp.is_deleted = 0
                 """;
         List<GetBillingAccountResponse> result = dbAccessor.executeQuery(sql, (rs, _i) -> {
             GetBillingAccountResponse.Builder builder = GetBillingAccountResponse.newBuilder();
@@ -179,6 +182,9 @@ public class SecurityService extends SecurityServiceGrpc.SecurityServiceImplBase
             ResultSetHelper.applyResultSetString(rs, 4, builder::setDescription);
             ResultSetHelper.applyResultSetLong(rs, 5, builder::setClientId);
             ResultSetHelper.applyResultSetBool(rs, 6, builder::setIsDeleted);
+            ResultSetHelper.applyResultSetLong(rs, 7, builder::setClientCompanyId);
+            ResultSetHelper.applyResultSetString(rs, 8, builder::setClientName);
+            ResultSetHelper.applyResultSetBool(rs, 9, builder::setClientIsDeleted);
             return builder.build();
         }, request.getId());
         responseObserver.onNext(result.isEmpty() ? GetBillingAccountResponse.getDefaultInstance() : result.get(0));
