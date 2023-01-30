@@ -977,6 +977,7 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
                 """;
         return dbAccessor.executeQuery(sql, (rs, _i) -> {
             PrizeProto.Builder builder = PrizeProto.newBuilder();
+            builder.setProjectId(projectId);
             ResultSetHelper.applyResultSetLong(rs, 1, builder::setId);
             ResultSetHelper.applyResultSetInt(rs, 2, builder::setPlace);
             ResultSetHelper.applyResultSetInt(rs, 3, builder::setPrizeAmount);
