@@ -35,10 +35,9 @@ public class ServerLogInterceptor implements ServerInterceptor {
 
             @Override
             public void onMessage(ReqT message) {
-                logger.info("{} : {}", call.getMethodDescriptor().getFullMethodName(), message);
+                logger.debug("{} : {}", call.getMethodDescriptor().getFullMethodName(), message);
                 super.onMessage(message);
             }
-
         };
     }
 }

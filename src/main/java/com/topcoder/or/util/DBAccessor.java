@@ -95,7 +95,6 @@ public class DBAccessor {
      * @throws DataAccessException exception
      */
     public List<Map<String, Object>> executeQuery(String query, @Nullable Object... args) throws DataAccessException {
-        logger.info("executeQuery: " + query + " with params: " + Arrays.toString(args));
         return executeQuery(tcsJdbcTemplate, query, args);
     }
 
