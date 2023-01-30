@@ -1,4 +1,6 @@
-<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
@@ -13,8 +15,8 @@
     <version>0.0.1-SNAPSHOT</version>
 
     <properties>
-        <maven.compiler.source>19</maven.compiler.source>
-        <maven.compiler.target>19</maven.compiler.target>
+        <maven.compiler.source>18</maven.compiler.source>
+        <maven.compiler.target>18</maven.compiler.target>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     </properties>
 
@@ -61,27 +63,6 @@
                 <artifactId>maven-compiler-plugin</artifactId>
                 <version>3.8.0</version>
             </plugin>
-            <!--            TODO: Setup Deploying docker image to ECR repository -->
-            <!--            <plugin>-->
-            <!--                <groupId>com.google.cloud.tools</groupId>-->
-            <!--                <artifactId>jib-maven-plugin</artifactId>-->
-            <!--                <version>3.3.0</version>-->
-            <!--                <configuration>-->
-            <!--                    <from>-->
-            <!--                        <image>maven:3.8.6-openjdk-18</image>-->
-            <!--                        <platforms>-->
-            <!--                            <platform>-->
-            <!--                                <architecture>arm64</architecture>-->
-            <!--                                <os>linux</os>-->
-            <!--                            </platform>-->
-            <!--                        </platforms>-->
-            <!--                    </from>-->
-            <!--                    <to>-->
-            <!--                        <image>public.ecr.aws/ACCOUNT_ID/tc-or-repository</image>-->
-            <!--                    </to>-->
-            <!--                </configuration>-->
-            <!--            </plugin>-->
-
         </plugins>
 
     </build>
