@@ -64,7 +64,8 @@ public class DBAccessor {
 
     public <T> List<T> executeQuery(JdbcTemplate jdbcTemplate, String query, RowMapper<T> mapper,
             @Nullable Object... args) throws DataAccessException {
-        logger.info("executeQuery: " + query + " with params: " + Arrays.toString(args));
+        logger.info("executeQuery: " + query.substring(0, Math.min(query.length(), 150)) + " with params: "
+                + Arrays.toString(args));
         return jdbcTemplate.query(query, mapper, args);
     }
 
@@ -82,7 +83,8 @@ public class DBAccessor {
 
     public int executeUpdate(JdbcTemplate jdbcTemplate, String query, @Nullable Object... args)
             throws DataAccessException {
-        logger.info("executeUpdate: " + query + " with params: " + Arrays.toString(args));
+        logger.info("executeUpdate: " + query.substring(0, Math.min(query.length(), 150)) + " with params: "
+                + Arrays.toString(args));
         return jdbcTemplate.update(query, args);
     }
 
@@ -100,7 +102,8 @@ public class DBAccessor {
 
     public List<Map<String, Object>> executeQuery(JdbcTemplate jdbcTemplate, String query, @Nullable Object... args)
             throws DataAccessException {
-        logger.info("executeQuery: " + query + " with params: " + Arrays.toString(args));
+        logger.info("executeQuery: " + query.substring(0, Math.min(query.length(), 150)) + " with params: "
+                + Arrays.toString(args));
         return jdbcTemplate.queryForList(query, args);
     }
 
@@ -110,14 +113,14 @@ public class DBAccessor {
 
     public Number executeUpdateReturningKey(JdbcTemplate jdbcTemplate, String query, PreparedStatementCreator psc)
             throws DataAccessException {
-        logger.info("executeUpdate: " + query);
+        logger.info("executeUpdate: " + query.substring(0, Math.min(query.length(), 150)));
         GeneratedKeyHolder generatedKeyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(psc, generatedKeyHolder);
         return generatedKeyHolder.getKey();
     }
 
     public SqlRowSet queryForRowSet(JdbcTemplate jdbcTemplate, String sql) throws DataAccessException {
-        logger.info("execute sql '{}'", sql);
+        logger.info("execute sql '{}'", sql.substring(0, Math.min(sql.length(), 150)));
         return jdbcTemplate.queryForRowSet(sql);
     }
 }
