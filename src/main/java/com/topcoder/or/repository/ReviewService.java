@@ -637,8 +637,7 @@ public class ReviewService extends ReviewServiceGrpc.ReviewServiceImplBase {
 
     private void validateCreateReviewItemCommentRequest(ReviewItemCommentProto request) {
         Helper.assertObjectNotNullAndPositive(request::hasResourceId, request::getResourceId, "resource_id");
-        Helper.assertObjectNotNullAndPositive(request::hasReviewItemCommentId, request::getReviewItemCommentId,
-                "review_item_id");
+        Helper.assertObjectNotNullAndPositive(request::hasReviewItemId, request::getReviewItemId, "review_item_id");
         Helper.assertObjectNotNullAndPositive(request::hasCommentTypeId, request::getCommentTypeId, "comment_type_id");
         Helper.assertObjectNotNull(request::hasContent, "content");
         Helper.assertObjectNotNull(request::hasSort, "sort");
