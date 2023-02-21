@@ -398,7 +398,8 @@ public class ReviewService extends ReviewServiceGrpc.ReviewServiceImplBase {
                 """;
         Long uploadId = Helper.extract(request::hasUploadId, request::getUploadId);
         int affected = dbAccessor.executeUpdate(sql, request.getScorecardQuestionId(), uploadId, request.getAnswer(),
-                request.getSort(), request.getModifyUser(), Helper.convertDate(request.getModifyDate()));
+                request.getSort(), request.getModifyUser(), Helper.convertDate(request.getModifyDate()),
+                request.getReviewItemId());
         responseObserver.onNext(CountProto.newBuilder().setCount(affected).build());
         responseObserver.onCompleted();
     }
@@ -413,7 +414,7 @@ public class ReviewService extends ReviewServiceGrpc.ReviewServiceImplBase {
         String extraInfo = Helper.extract(request::hasExtraInfo, request::getExtraInfo);
         int affected = dbAccessor.executeUpdate(sql, request.getResourceId(), request.getCommentTypeId(),
                 request.getContent(), extraInfo, request.getSort(), request.getModifyUser(),
-                Helper.convertDate(request.getModifyDate()));
+                Helper.convertDate(request.getModifyDate()), request.getReviewItemCommentId());
         responseObserver.onNext(CountProto.newBuilder().setCount(affected).build());
         responseObserver.onCompleted();
     }

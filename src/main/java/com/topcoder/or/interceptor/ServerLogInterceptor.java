@@ -26,7 +26,8 @@ public class ServerLogInterceptor implements ServerInterceptor {
             @Override
             public void sendMessage(RespT message) {
                 logger.info("{} : {}", call.getMethodDescriptor().getFullMethodName(),
-                        message.toString().substring(0, Math.min(message.toString().length(), 150)));
+                        message.toString().substring(0, Math.min(message.toString().length(), 150)).replaceAll("\n",
+                                " "));
                 super.sendMessage(message);
             }
         };
@@ -36,7 +37,8 @@ public class ServerLogInterceptor implements ServerInterceptor {
 
             @Override
             public void onMessage(ReqT message) {
-                logger.info("{} : {}", call.getMethodDescriptor().getFullMethodName(), message);
+                logger.info("{} : {}", call.getMethodDescriptor().getFullMethodName(),
+                        message.toString().replaceAll("\n", " "));
                 super.onMessage(message);
             }
         };

@@ -131,7 +131,7 @@ public class UploadService extends UploadServiceGrpc.UploadServiceImplBase {
 
     @Override
     public void addUpload(UploadProto request, StreamObserver<IdProto> responseObserver) {
-        validateUploadProto(request);
+        validateUploadProtoForCreate(request);
         String sql = """
                 INSERT INTO upload (upload_id, create_user, create_date, modify_user, modify_date, project_id, project_phase_id,
                 resource_id, upload_type_id, upload_status_id, parameter, upload_desc)
@@ -151,7 +151,7 @@ public class UploadService extends UploadServiceGrpc.UploadServiceImplBase {
 
     @Override
     public void addSubmission(SubmissionProto request, StreamObserver<IdProto> responseObserver) {
-        validateSubmissionProto(request);
+        validateSubmissionProtoForCreate(request);
         String sql = """
                 INSERT INTO submission (submission_id, create_user, create_date, modify_user, modify_date, submission_status_id,
                 submission_type_id, screening_score, initial_score, final_score, placement, user_rank, mark_for_purchase, prize_id, upload_id, thurgood_job_id)
@@ -497,7 +497,7 @@ public class UploadService extends UploadServiceGrpc.UploadServiceImplBase {
         validateEntityIdsProto(request);
         String sql = """
                 SELECT upload.upload_id, upload.create_user as upload_create_user, upload.create_date as upload_create_date,
-                upload.modify_user, upload.modify_date as upload_modify_user, upload.project_id, upload.project_phase_id,
+                upload.modify_user as upload_modify_user, upload.modify_date as upload_modify_date, upload.project_id, upload.project_phase_id,
                 upload.resource_id, upload.parameter as upload_parameter, upload.upload_desc, upload.url, upload_type_lu.upload_type_id,
                 upload_type_lu.create_user as upload_type_create_user, upload_type_lu.create_date as upload_type_create_date,
                 upload_type_lu.modify_user as upload_type_modify_user, upload_type_lu.modify_date as upload_type_modify_date,
@@ -508,7 +508,7 @@ public class UploadService extends UploadServiceGrpc.UploadServiceImplBase {
                 FROM upload
                 INNER JOIN upload_type_lu ON upload.upload_type_id=upload_type_lu.upload_type_id
                 INNER JOIN upload_status_lu ON upload.upload_status_id=upload_status_lu.upload_status_id
-                WHERE upload_id IN (%s)
+                WHERE upload_id IN
                 """;
         String inSql = " (%s)".formatted(Helper.getInClause(request.getIdsCount()));
         List<UploadCompleteProto> result = dbAccessor.executeQuery(sql.concat(inSql), (rs, _i) -> {
@@ -646,13 +646,6 @@ public class UploadService extends UploadServiceGrpc.UploadServiceImplBase {
     }
 
     private void validateUploadProto(UploadProto request) {
-        Helper.assertObjectNotNull(request::hasCreateUser, "create_user");
-        Helper.assertObjectNotNull(request::hasCreateDate, "create_date");
-        validateUploadProtoForUpdate(request);
-    }
-
-    private void validateUploadProtoForUpdate(UploadProto request) {
-        Helper.assertObjectNotNullAndPositive(request::hasUploadId, request::getUploadId, "upload_id");
         Helper.assertObjectNotNullAndPositive(request::hasUploadTypeId, request::getUploadTypeId, "upload_type_id");
         Helper.assertObjectNotNullAndPositive(request::hasUploadStatusId, request::getUploadStatusId,
                 "upload_status_id");
@@ -663,14 +656,18 @@ public class UploadService extends UploadServiceGrpc.UploadServiceImplBase {
         Helper.assertObjectNotNull(request::hasParameter, "parameter");
     }
 
-    private void validateSubmissionProto(SubmissionProto request) {
+    private void validateUploadProtoForCreate(UploadProto request) {
+        validateUploadProto(request);
         Helper.assertObjectNotNull(request::hasCreateUser, "create_user");
         Helper.assertObjectNotNull(request::hasCreateDate, "create_date");
-        validateSubmissionProtoForUpdate(request);
     }
 
-    private void validateSubmissionProtoForUpdate(SubmissionProto request) {
-        Helper.assertObjectNotNullAndPositive(request::hasSubmissionId, request::getSubmissionId, "submission_id");
+    private void validateUploadProtoForUpdate(UploadProto request) {
+        validateUploadProto(request);
+        Helper.assertObjectNotNullAndPositive(request::hasUploadId, request::getUploadId, "upload_id");
+    }
+
+    private void validateSubmissionProto(SubmissionProto request) {
         Helper.assertObjectNotNullAndPositive(request::hasUploadId, request::getUploadId, "upload_id");
         Helper.assertObjectNotNullAndPositive(request::hasSubmissionStatusId, request::getSubmissionStatusId,
                 "submission_status_id");
@@ -678,6 +675,17 @@ public class UploadService extends UploadServiceGrpc.UploadServiceImplBase {
                 "submission_type_id");
         Helper.assertObjectNotNull(request::hasModifyUser, "modify_user");
         Helper.assertObjectNotNull(request::hasModifyDate, "modify_date");
+    }
+
+    private void validateSubmissionProtoForCreate(SubmissionProto request) {
+        validateSubmissionProto(request);
+        Helper.assertObjectNotNull(request::hasCreateUser, "create_user");
+        Helper.assertObjectNotNull(request::hasCreateDate, "create_date");
+    }
+
+    private void validateSubmissionProtoForUpdate(SubmissionProto request) {
+        validateSubmissionProto(request);
+        Helper.assertObjectNotNullAndPositive(request::hasSubmissionId, request::getSubmissionId, "submission_id");
     }
 
     private void validateSubmissionImageProto(SubmissionImageProto request) {

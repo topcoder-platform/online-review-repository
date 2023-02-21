@@ -64,8 +64,7 @@ public class DBAccessor {
 
     public <T> List<T> executeQuery(JdbcTemplate jdbcTemplate, String query, RowMapper<T> mapper,
             @Nullable Object... args) throws DataAccessException {
-        logger.info("executeQuery: " + query.substring(0, Math.min(query.length(), 150)) + " with params: "
-                + Arrays.toString(args));
+        logQuery("executeQuery", query, args);
         return jdbcTemplate.query(query, mapper, args);
     }
 
@@ -83,8 +82,7 @@ public class DBAccessor {
 
     public int executeUpdate(JdbcTemplate jdbcTemplate, String query, @Nullable Object... args)
             throws DataAccessException {
-        logger.info("executeUpdate: " + query.substring(0, Math.min(query.length(), 150)) + " with params: "
-                + Arrays.toString(args));
+        logQuery("executeUpdate", query, args);
         return jdbcTemplate.update(query, args);
     }
 
@@ -102,8 +100,7 @@ public class DBAccessor {
 
     public List<Map<String, Object>> executeQuery(JdbcTemplate jdbcTemplate, String query, @Nullable Object... args)
             throws DataAccessException {
-        logger.info("executeQuery: " + query.substring(0, Math.min(query.length(), 150)) + " with params: "
-                + Arrays.toString(args));
+        logQuery("executeQueryForList", query, args);
         return jdbcTemplate.queryForList(query, args);
     }
 
@@ -113,14 +110,23 @@ public class DBAccessor {
 
     public Number executeUpdateReturningKey(JdbcTemplate jdbcTemplate, String query, PreparedStatementCreator psc)
             throws DataAccessException {
-        logger.info("executeUpdate: " + query.substring(0, Math.min(query.length(), 150)));
+        logQuery("executeUpdate", query);
         GeneratedKeyHolder generatedKeyHolder = new GeneratedKeyHolder();
         jdbcTemplate.update(psc, generatedKeyHolder);
         return generatedKeyHolder.getKey();
     }
 
     public SqlRowSet queryForRowSet(JdbcTemplate jdbcTemplate, String sql) throws DataAccessException {
-        logger.info("execute sql '{}'", sql.substring(0, Math.min(sql.length(), 150)));
+        logQuery("executeQueryForRowSet", sql);
         return jdbcTemplate.queryForRowSet(sql);
+    }
+
+    private void logQuery(String type, String query, @Nullable Object... args) {
+        String sanitized = query.substring(0, Math.min(query.length(), 150)).replaceAll("\n", " ");
+        if (args != null && args.length > 0) {
+            logger.info(type + ": '{}' with params: {}", sanitized, Arrays.toString(args));
+        } else {
+            logger.info(type + ": '{}'", sanitized);
+        }
     }
 }
