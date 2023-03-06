@@ -677,6 +677,19 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
         responseObserver.onCompleted();
     }
 
+    @Override
+    public void updateProjectStatus(UpdateProjectStatusRequest request, StreamObserver<CountProto> responseObserver) {
+        validateUpdateProjectStatusRequest(request);
+        String sql = """
+                UPDATE project
+                SET project_status_id = ?
+                WHERE project_id = ?
+                """;
+        int affected = dbAccessor.executeUpdate(sql, request.getStatusId(), request.getProjectId());
+        responseObserver.onNext(CountProto.newBuilder().setCount(affected).build());
+        responseObserver.onCompleted();
+    }
+
     private List<ProjectProto.Builder> getProjects(List<Long> projectIds) {
         String sql = """
                 SELECT project.project_id, status.project_status_id, status.name as status_name, category.project_category_id,
@@ -772,8 +785,10 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
 
     private int createProjectProperty(long projectId, String operator, long propertyTypeId, String value) {
         String sql = """
+                SET LOCK MODE TO WAIT 10;
                 INSERT INTO project_info (project_id, project_info_type_id, value, create_user, create_date, modify_user, modify_date)
                 VALUES (?, ?, ?, ?, CURRENT, ?, CURRENT)
+                SET LOCK MODE TO NOT WAIT;
                 """;
         int affected = dbAccessor.executeUpdate(sql, projectId, propertyTypeId, value, operator, operator);
         auditProjectInfo(projectId, AUDIT_CREATE_TYPE, propertyTypeId, value, operator);
@@ -1514,6 +1529,11 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
         Helper.assertObjectNotNull(request::hasDestProjectId, "dest_project_id");
         Helper.assertObjectNotNull(request::hasSourceProjectId, "source_project_id");
         Helper.assertObjectNotNull(request::hasLinkTypeId, "link_type_id");
+    }
+
+    private void validateUpdateProjectStatusRequest(UpdateProjectStatusRequest request) {
+        Helper.assertObjectNotNull(request::hasProjectId, "project_id");
+        Helper.assertObjectNotNull(request::hasStatusId, "status_id");
     }
     /* #endregion */
 }
