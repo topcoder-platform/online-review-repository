@@ -8,5 +8,4 @@ RUN mvn -f /home/tc-or-grpc-server/pom.xml clean package
 
 FROM openjdk:18.0.2.1-oracle
 COPY --from=build /home/tc-or-grpc-server/target/or-repository-0.0.1-SNAPSHOT.jar /usr/local/lib/or-repository.jar
-EXPOSE 8080
 ENTRYPOINT ["java","-jar","/usr/local/lib/or-repository.jar"]
