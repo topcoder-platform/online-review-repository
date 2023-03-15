@@ -103,8 +103,13 @@ public class UserRetrievalService extends UserRetrievalServiceGrpc.UserRetrieval
     @Override
     public void getUserRatingsByHandles(HandlesRequest request,
             StreamObserver<GetUserRatingsResponse> responseObserver) {
-        List<UserRatingProto> result = getUserRatings(validateAndGetHandlesCondition(request),
+        UserIdsRequest userIds = getUserIds(validateAndGetHandlesCondition(request),
                 request.getHandlesList().toArray());
+        List<UserRatingProto> result = new ArrayList<>();
+        if (userIds.getIdsCount() != 0) {
+            result = getUserRatings(validateAndGetUserIdCondition(userIds),
+                    userIds.getIdsList().toArray());
+        }
         responseObserver.onNext(GetUserRatingsResponse.newBuilder().addAllUserRatings(result).build());
         responseObserver.onCompleted();
     }
@@ -112,8 +117,13 @@ public class UserRetrievalService extends UserRetrievalServiceGrpc.UserRetrieval
     @Override
     public void getUserRatingsByLowerHandles(HandlesRequest request,
             StreamObserver<GetUserRatingsResponse> responseObserver) {
-        List<UserRatingProto> result = getUserRatings(validateAndGetLowerHandlesCondition(request),
+        UserIdsRequest userIds = getUserIds(validateAndGetLowerHandlesCondition(request),
                 request.getHandlesList().stream().map(String::toLowerCase).toArray());
+        List<UserRatingProto> result = new ArrayList<>();
+        if (userIds.getIdsCount() != 0) {
+            result = getUserRatings(validateAndGetUserIdCondition(userIds),
+                    userIds.getIdsList().toArray());
+        }
         responseObserver.onNext(GetUserRatingsResponse.newBuilder().addAllUserRatings(result).build());
         responseObserver.onCompleted();
     }
@@ -124,7 +134,12 @@ public class UserRetrievalService extends UserRetrievalServiceGrpc.UserRetrieval
         List<String> names = new ArrayList<>();
         names.add(request.getFirstName());
         names.add(request.getLastName());
-        List<UserRatingProto> result = getUserRatings(validateAndGetNameCondition(request), names.toArray());
+        UserIdsRequest userIds = getUserIds(validateAndGetNameCondition(request), names.toArray());
+        List<UserRatingProto> result = new ArrayList<>();
+        if (userIds.getIdsCount() != 0) {
+            result = getUserRatings(validateAndGetUserIdCondition(userIds),
+                    userIds.getIdsList().toArray());
+        }
         responseObserver.onNext(GetUserRatingsResponse.newBuilder().addAllUserRatings(result).build());
         responseObserver.onCompleted();
     }
@@ -167,10 +182,11 @@ public class UserRetrievalService extends UserRetrievalServiceGrpc.UserRetrieval
     private List<ExternalUserProto> getUsers(String condition, Object[] parameters) {
         String sql = """
                 SELECT u.user_id, first_name, last_name, handle, address
-                FROM user u, email
-                WHERE u.user_id = email.user_id AND email.primary_ind = 1 AND
+                FROM common_oltp.user u
+                JOIN common_oltp.email e ON e.user_id = u.user_id
+                WHERE e.primary_ind = 1 AND
                 """ + condition;
-        return dbAccessor.executeQuery(sql, (rs, _i) -> {
+        return dbAccessor.executeQuery(dbAccessor.getPgJdbcTemplate(), sql, (rs, _i) -> {
             ExternalUserProto.Builder builder = ExternalUserProto.newBuilder();
             ResultSetHelper.applyResultSetLong(rs, 1, builder::setUserId);
             ResultSetHelper.applyResultSetString(rs, 2, builder::setFirstName);
@@ -181,13 +197,26 @@ public class UserRetrievalService extends UserRetrievalServiceGrpc.UserRetrieval
         }, parameters);
     }
 
+    private UserIdsRequest getUserIds(String condition, Object[] parameters) {
+        String sql = """
+                SELECT u.user_id
+                FROM common_oltp.user u
+                WHERE
+                """ + condition;
+        List<Long> result = dbAccessor.executeQuery(dbAccessor.getPgJdbcTemplate(), sql, (rs, _i) -> {
+            return rs.getLong(1);
+        }, parameters);
+        return UserIdsRequest.newBuilder().addAllIds(result).build();
+    }
+
     private List<EmailProto> getAlternativeEmails(String condition, Object[] parameters) {
         String sql = """
                 SELECT u.user_id, address
-                FROM user u, email
-                WHERE u.user_id = email.user_id AND email.primary_ind = 0 AND
+                FROM common_oltp.user u
+                JOIN common_oltp.email e ON e.user_id = u.user_id
+                WHERE e.primary_ind = 0 AND
                 """ + condition;
-        return dbAccessor.executeQuery(sql, (rs, _i) -> {
+        return dbAccessor.executeQuery(dbAccessor.getPgJdbcTemplate(), sql, (rs, _i) -> {
             EmailProto.Builder builder = EmailProto.newBuilder();
             ResultSetHelper.applyResultSetLong(rs, 1, builder::setUserId);
             ResultSetHelper.applyResultSetString(rs, 2, builder::setAddress);
@@ -197,10 +226,10 @@ public class UserRetrievalService extends UserRetrievalServiceGrpc.UserRetrieval
 
     private List<UserRatingProto> getUserRatings(String condition, Object[] parameters) {
         String sql = """
-                SELECT u.user_id id, r.rating rating, r.phase_id phaseId, vol volatility, num_ratings numRatings, ur.rating reliability
-                FROM user u, user_rating r,
+                SELECT u.user_id id, u.rating rating, u.phase_id phaseId, vol volatility, num_ratings numRatings, ur.rating reliability
+                FROM user_rating u,
                 OUTER user_reliability ur
-                WHERE u.user_id = r.user_id AND u.user_id = ur.user_id AND r.phase_id = ur.phase_id AND
+                WHERE u.user_id = ur.user_id AND u.phase_id = ur.phase_id AND
                 """
                 + condition;
         return dbAccessor.executeQuery(sql, (rs, _i) -> {

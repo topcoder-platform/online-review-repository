@@ -313,24 +313,33 @@ public class SecurityService extends SecurityServiceGrpc.SecurityServiceImplBase
     @Override
     public void getUserRoles(GetUserRolesRequest request, StreamObserver<GetUserRolesResponse> responseObserver) {
         validateGetUserRolesRequest(request);
+        List<Long> userGroupIds = getUserGroupIds(request.getUserId());
+        List<Object> param = new ArrayList<>();
+        param.add(request.getUserId());
+
         String sql = """
                 SELECT security_roles.role_id, description
                 FROM user_role_xref, security_roles
                 WHERE user_role_xref.login_id = ? AND user_role_xref.role_id = security_roles.role_id
                 AND user_role_xref.security_status_id = 1
-                UNION
-                SELECT security_roles.role_id, description
-                FROM security_roles, user_group_xref, group_role_xref
-                WHERE user_group_xref.login_id = ? AND user_group_xref.group_id = group_role_xref.group_id
-                AND user_group_xref.security_status_id = 1 AND group_role_xref.security_status_id = 1
-                AND group_role_xref.role_id = security_roles.role_id
                 """;
+        if (!userGroupIds.isEmpty()) {
+            sql = sql + """
+                    UNION
+                    SELECT security_roles.role_id, description
+                    FROM security_roles, group_role_xref
+                    WHERE group_role_xref.group_id IN (%s)
+                    AND group_role_xref.security_status_id = 1
+                    AND group_role_xref.role_id = security_roles.role_id
+                    """.formatted(Helper.getInClause(userGroupIds.size()));
+            param.addAll(userGroupIds);
+        }
         List<UserRoleProto> result = dbAccessor.executeQuery(sql, (rs, _i) -> {
             UserRoleProto.Builder builder = UserRoleProto.newBuilder();
             ResultSetHelper.applyResultSetLong(rs, 1, builder::setRoleId);
             ResultSetHelper.applyResultSetString(rs, 2, builder::setDescription);
             return builder.build();
-        }, request.getUserId(), request.getUserId());
+        }, param.toArray());
         responseObserver.onNext(GetUserRolesResponse.newBuilder().addAllUserRoles(result).build());
         responseObserver.onCompleted();
     }
@@ -340,13 +349,24 @@ public class SecurityService extends SecurityServiceGrpc.SecurityServiceImplBase
             StreamObserver<IsCloudSpokesUserResponse> responseObserver) {
         validateIsCloudSpokesUserRequest(request);
         String sql = """
-                SELECT CASE WHEN EXISTS (SELECT 1 FROM user WHERE handle = ? and lower(reg_source) = 'cloudspokes') THEN 1 ELSE 0 END FROM DUAL
+                SELECT CASE WHEN EXISTS (SELECT 1 FROM common_oltp.user WHERE handle = ? and lower(reg_source) = 'cloudspokes') THEN 1 ELSE 0 END
                 """;
-        boolean result = dbAccessor.executeQuery(sql, (rs, _i) -> {
+        boolean result = dbAccessor.executeQuery(dbAccessor.getPgJdbcTemplate(), sql, (rs, _i) -> {
             return rs.getObject(1).equals(1);
         }, request.getHandle()).get(0);
         responseObserver.onNext(IsCloudSpokesUserResponse.newBuilder().setIsCloudSpokesUser(result).build());
         responseObserver.onCompleted();
+    }
+
+    private List<Long> getUserGroupIds(long userId) {
+        String sql = """
+                SELECT group_id
+                FROM user_group_xref
+                WHERE login_id = ? AND security_status_id = 1
+                """;
+        return dbAccessor.executeQuery(dbAccessor.getPgJdbcTemplate(), sql, (rs, _i) -> {
+            return rs.getLong(1);
+        }, userId);
     }
 
     private void validateGetGroupMembersRequest(GetGroupMembersRequest request) {

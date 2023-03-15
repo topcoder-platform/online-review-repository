@@ -27,29 +27,20 @@ public class WebCommonService extends WebCommonServiceGrpc.WebCommonServiceImplB
     public void getUserPassword(GetUserPasswordRequest request,
             StreamObserver<GetUserPasswordResponse> responseObserver) {
         validateGetUserPasswordRequest(request);
-        DataAccess dataAccess = new DataAccess(dbAccessor, dbAccessor.getOltpJdbcTemplate());
-        Request dbRequest = new Request();
-        String queryName = "userid_to_password";
-        dbRequest.setContentHandle(queryName);
-        dbRequest.setProperty("uid", String.valueOf(request.getUserId()));
-        Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
-        List<Map<String, Object>> userData = result.get(queryName);
-        GetUserPasswordResponse response;
-        if (userData.isEmpty()) {
-            response = GetUserPasswordResponse.getDefaultInstance();
-        } else {
-            GetUserPasswordResponse.Builder builder = GetUserPasswordResponse.newBuilder();
-            String password = Helper.getString(userData.get(0), "password");
-            if (password != null) {
-                builder.setPassword(password);
-            }
-            String status = Helper.getString(userData.get(0), "status");
-            if (status != null) {
-                builder.setStatus(status);
-            }
-            response = builder.build();
-        }
-        responseObserver.onNext(response);
+        String sql = """
+                SELECT su.password, u.status
+                FROM security_user su
+                LEFT JOIN common_oltp.user u ON u.user_id = su.login_id
+                WHERE su.login_id = ?
+                """;
+        List<GetUserPasswordResponse> result = dbAccessor.executeQuery(dbAccessor.getPgJdbcTemplate(), sql,
+                (rs, _i) -> {
+                    GetUserPasswordResponse.Builder builder = GetUserPasswordResponse.newBuilder();
+                    ResultSetHelper.applyResultSetString(rs, 1, builder::setPassword);
+                    ResultSetHelper.applyResultSetString(rs, 2, builder::setStatus);
+                    return builder.build();
+                }, request.getUserId());
+        responseObserver.onNext(result.isEmpty() ? GetUserPasswordResponse.getDefaultInstance() : result.get(0));
         responseObserver.onCompleted();
     }
 

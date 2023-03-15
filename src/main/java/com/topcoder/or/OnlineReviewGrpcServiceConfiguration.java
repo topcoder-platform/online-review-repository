@@ -65,4 +65,15 @@ public class OnlineReviewGrpcServiceConfiguration {
     public JdbcTemplate jdbcTemplate4(@Qualifier("db4") DataSource ds) {
         return new JdbcTemplate(ds);
     }
+
+    @Bean(name = "db5")
+    @ConfigurationProperties(prefix = "spring.datasource5")
+    public DataSource dataSource5() {
+        return DataSourceBuilder.create().build();
+    }
+
+    @Bean(name = "pgJdbcTemplate")
+    public JdbcTemplate jdbcTemplate5(@Qualifier("db5") DataSource ds) {
+        return new JdbcTemplate(ds);
+    }
 }

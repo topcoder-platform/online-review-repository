@@ -20,14 +20,16 @@ public class DBAccessor {
     private final JdbcTemplate oltpJdbcTemplate;
     private final JdbcTemplate tcsDwJdbcTemplate;
     private final JdbcTemplate commonJdbcTemplate;
+    private final JdbcTemplate pgJdbcTemplate;
     private final Logger logger;
 
     public DBAccessor(JdbcTemplate tcsJdbcTemplate, JdbcTemplate oltpJdbcTemplate, JdbcTemplate tcsDwJdbcTemplate,
-            JdbcTemplate commonJdbcTemplate, Logger logger) {
+            JdbcTemplate commonJdbcTemplate, JdbcTemplate pgJdbcTemplate, Logger logger) {
         this.tcsJdbcTemplate = tcsJdbcTemplate;
         this.oltpJdbcTemplate = oltpJdbcTemplate;
         this.tcsDwJdbcTemplate = tcsDwJdbcTemplate;
         this.commonJdbcTemplate = commonJdbcTemplate;
+        this.pgJdbcTemplate = pgJdbcTemplate;
         this.logger = logger;
     }
 
@@ -45,6 +47,10 @@ public class DBAccessor {
 
     public JdbcTemplate getCommonJdbcTemplate() {
         return commonJdbcTemplate;
+    }
+
+    public JdbcTemplate getPgJdbcTemplate() {
+        return pgJdbcTemplate;
     }
 
     /**

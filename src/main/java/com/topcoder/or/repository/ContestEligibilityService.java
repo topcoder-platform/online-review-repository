@@ -159,17 +159,16 @@ public class ContestEligibilityService extends ContestEligibilityServiceGrpc.Con
             StreamObserver<ValidateUserContestEligibilityResponse> responseObserver) {
         validateValidateUserContestEligibilityRequest(request);
         String sql = """
-                select first 1 user_group_id
-                from common_oltp:user_group_xref
-                where security_status_id = 1 and login_id = ? and group_id = ?
-                    """;
+                SELECT CASE WHEN EXISTS (SELECT 1 FROM user_group_xref WHERE security_status_id = 1 and login_id = ? and group_id = ?) THEN 1 ELSE 0 END
+                """;
         final Long userId = Helper.extract(request::hasUserId, request::getUserId);
         final Long groupId = Helper.extract(request::hasGroupId, request::getGroupId);
-        List<Long> result = dbAccessor.executeQuery(sql, (rs, _i) -> {
-            return rs.getLong(1);
-        }, userId, groupId);
+        boolean result = dbAccessor.executeQuery(dbAccessor.getPgJdbcTemplate(), sql, (rs, _i) -> {
+            return rs.getObject(1).equals(1);
+        }, userId, groupId).get(0);
+
         ValidateUserContestEligibilityResponse response = ValidateUserContestEligibilityResponse.newBuilder()
-                .setIsValid(!result.isEmpty()).build();
+                .setIsValid(result).build();
         responseObserver.onNext(response);
         responseObserver.onCompleted();
     }
