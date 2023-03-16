@@ -137,7 +137,7 @@ public class SecurityService extends SecurityServiceGrpc.SecurityServiceImplBase
         dbRequest.setContentHandle(queryName);
         dbRequest.setProperty("uid", String.valueOf(request.getUserId()));
         Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
-        List<Map<String, Object>> userData = result.get(queryName);
+        List<Map<String, Object>> userData = result.getOrDefault(queryName, new ArrayList<>());
         IsAdministratorResponse response = IsAdministratorResponse.newBuilder().setIsAdministrator(!userData.isEmpty())
                 .build();
         responseObserver.onNext(response);
@@ -199,7 +199,7 @@ public class SecurityService extends SecurityServiceGrpc.SecurityServiceImplBase
         String queryName = "admin_client_billing_accounts_v2";
         dbRequest.setContentHandle(queryName);
         Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
-        List<Map<String, Object>> data = result.get(queryName);
+        List<Map<String, Object>> data = result.getOrDefault(queryName, new ArrayList<>());
         List<BillingAccountForClientProto> billingAccounts = new ArrayList<>();
         for (int i = 0; i < data.size(); i++) {
             BillingAccountForClientProto.Builder builder = BillingAccountForClientProto.newBuilder();
@@ -235,7 +235,7 @@ public class SecurityService extends SecurityServiceGrpc.SecurityServiceImplBase
         dbRequest.setProperty("tcdirectid", String.valueOf(request.getProjectId()));
         dbRequest.setContentHandle(queryName);
         Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
-        List<Map<String, Object>> data = result.get(queryName);
+        List<Map<String, Object>> data = result.getOrDefault(queryName, new ArrayList<>());
         GetProjectNameResponse response;
         if (data.isEmpty()) {
             response = GetProjectNameResponse.getDefaultInstance();
@@ -258,7 +258,7 @@ public class SecurityService extends SecurityServiceGrpc.SecurityServiceImplBase
         String queryName = "admin_client_billing_accounts_v2";
         dbRequest.setContentHandle(queryName);
         Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
-        List<Map<String, Object>> data = result.get(queryName);
+        List<Map<String, Object>> data = result.getOrDefault(queryName, new ArrayList<>());
         List<ProjectByClientIdProto> projects = new ArrayList<>();
         for (int i = 0; i < data.size(); i++) {
             ProjectByClientIdProto.Builder builder = ProjectByClientIdProto.newBuilder();
@@ -288,7 +288,7 @@ public class SecurityService extends SecurityServiceGrpc.SecurityServiceImplBase
         String queryName = "admin_client_billing_accounts_v2";
         dbRequest.setContentHandle(queryName);
         Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
-        List<Map<String, Object>> data = result.get(queryName);
+        List<Map<String, Object>> data = result.getOrDefault(queryName, new ArrayList<>());
         List<ProjectByBillingAccountProto> projects = new ArrayList<>();
         for (int i = 0; i < data.size(); i++) {
             ProjectByBillingAccountProto.Builder builder = ProjectByBillingAccountProto.newBuilder();
