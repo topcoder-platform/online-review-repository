@@ -787,7 +787,7 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
         String sql = """
                 SET LOCK MODE TO WAIT 10;
                 INSERT INTO project_info (project_id, project_info_type_id, value, create_user, create_date, modify_user, modify_date)
-                VALUES (?, ?, ?, ?, CURRENT, ?, CURRENT)
+                VALUES (?, ?, ?, ?, CURRENT, ?, CURRENT);
                 SET LOCK MODE TO NOT WAIT;
                 """;
         int affected = dbAccessor.executeUpdate(sql, projectId, propertyTypeId, value, operator, operator);
