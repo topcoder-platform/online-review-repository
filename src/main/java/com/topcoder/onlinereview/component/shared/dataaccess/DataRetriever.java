@@ -556,6 +556,7 @@ public class DataRetriever {
           List<Map<String, Object>> rs = dbAccessor.executeQuery(jdbcTemplate, queryText);
           resultMap.put(queryName, rs);
         } catch (Exception e) {
+          handleException(e, queryText, inputs);
         }
       }
       trackExecution(commandId, System.currentTimeMillis() - start, inputs);

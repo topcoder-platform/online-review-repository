@@ -38,7 +38,7 @@ public class DataAccessService extends DataAccessServiceGrpc.DataAccessServiceIm
         dbRequest.setProperty("cd", String.valueOf(request.getComponentId()));
         dbRequest.setProperty("vid", String.valueOf(request.getVersionNumber()));
         Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
-        List<Map<String, Object>> versionData = result.get(queryName);
+        List<Map<String, Object>> versionData = result.getOrDefault(queryName, new ArrayList<>());
         GetComponentVersionInfoResponse response;
         if (versionData.isEmpty()) {
             response = GetComponentVersionInfoResponse.getDefaultInstance();
@@ -63,7 +63,7 @@ public class DataAccessService extends DataAccessServiceGrpc.DataAccessServiceIm
         dbRequest.setContentHandle(queryName);
         dbRequest.setProperty("cv", String.valueOf(request.getComponentVersionId()));
         Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
-        List<Map<String, Object>> data = result.get(queryName);
+        List<Map<String, Object>> data = result.getOrDefault(queryName, new ArrayList<>());
         List<DocumentProto> documents = new ArrayList<>();
         for (int i = 0; i < data.size(); i++) {
             DocumentProto.Builder document = DocumentProto.newBuilder();
@@ -126,7 +126,7 @@ public class DataAccessService extends DataAccessServiceGrpc.DataAccessServiceIm
         String queryName = "tcs_deliverables";
         dbRequest.setContentHandle(queryName);
         Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
-        List<Map<String, Object>> data = result.get(queryName);
+        List<Map<String, Object>> data = result.getOrDefault(queryName, new ArrayList<>());
         List<DeliverableProto> deliverables = new ArrayList<>();
         for (int i = 0; i < data.size(); i++) {
             DeliverableProto.Builder deliverible = DeliverableProto.newBuilder();
@@ -159,9 +159,10 @@ public class DataAccessService extends DataAccessServiceGrpc.DataAccessServiceIm
         dbRequest.setProperty("pj", String.valueOf(request.getProjectId()));
         dbRequest.setProperty("uid", String.valueOf(request.getUserId()));
         Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
-        List<Map<String, Object>> data = result.get(queryName);
+        List<Map<String, Object>> data = result.getOrDefault(queryName, new ArrayList<>());
         responseObserver
-                .onNext(IsCockpitProjectUserResponse.newBuilder().setIsCockpitProjectUser(!data.isEmpty()).build());
+                .onNext(IsCockpitProjectUserResponse.newBuilder()
+                        .setIsCockpitProjectUser(!data.isEmpty()).build());
         responseObserver.onCompleted();
     }
 
@@ -175,7 +176,7 @@ public class DataAccessService extends DataAccessServiceGrpc.DataAccessServiceIm
         dbRequest.setContentHandle(queryName);
         dbRequest.setProperty("pj", String.valueOf(request.getCockpitProjectId()));
         Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
-        List<Map<String, Object>> data = result.get(queryName);
+        List<Map<String, Object>> data = result.getOrDefault(queryName, new ArrayList<>());
         GetCockpitProjectResponse response;
         if (data.isEmpty()) {
             response = GetCockpitProjectResponse.getDefaultInstance();
@@ -202,7 +203,7 @@ public class DataAccessService extends DataAccessServiceGrpc.DataAccessServiceIm
         String queryName = "cockpit_projects";
         dbRequest.setContentHandle(queryName);
         Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
-        List<Map<String, Object>> data = result.get(queryName);
+        List<Map<String, Object>> data = result.getOrDefault(queryName, new ArrayList<>());
         List<GetCockpitProjectResponse> projects = new ArrayList<>();
         for (int i = 0; i < data.size(); i++) {
             GetCockpitProjectResponse.Builder builder = GetCockpitProjectResponse.newBuilder();
@@ -230,7 +231,7 @@ public class DataAccessService extends DataAccessServiceGrpc.DataAccessServiceIm
         dbRequest.setContentHandle(queryName);
         dbRequest.setProperty("uid", String.valueOf(request.getUserId()));
         Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
-        List<Map<String, Object>> data = result.get(queryName);
+        List<Map<String, Object>> data = result.getOrDefault(queryName, new ArrayList<>());
         List<GetCockpitProjectResponse> projects = new ArrayList<>();
         for (int i = 0; i < data.size(); i++) {
             GetCockpitProjectResponse.Builder builder = GetCockpitProjectResponse.newBuilder();
@@ -258,7 +259,7 @@ public class DataAccessService extends DataAccessServiceGrpc.DataAccessServiceIm
         dbRequest.setContentHandle(queryName);
         dbRequest.setProperty("pj", String.valueOf(request.getClientProjectId()));
         Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
-        List<Map<String, Object>> data = result.get(queryName);
+        List<Map<String, Object>> data = result.getOrDefault(queryName, new ArrayList<>());
         GetClientProjectResponse response;
         if (data.isEmpty()) {
             response = GetClientProjectResponse.getDefaultInstance();
@@ -285,7 +286,7 @@ public class DataAccessService extends DataAccessServiceGrpc.DataAccessServiceIm
         String queryName = "client_projects";
         dbRequest.setContentHandle(queryName);
         Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
-        List<Map<String, Object>> data = result.get(queryName);
+        List<Map<String, Object>> data = result.getOrDefault(queryName, new ArrayList<>());
         List<GetClientProjectResponse> projects = new ArrayList<>();
         for (int i = 0; i < data.size(); i++) {
             GetClientProjectResponse.Builder builder = GetClientProjectResponse.newBuilder();
@@ -313,7 +314,7 @@ public class DataAccessService extends DataAccessServiceGrpc.DataAccessServiceIm
         dbRequest.setContentHandle(queryName);
         dbRequest.setProperty("uid", String.valueOf(request.getUserId()));
         Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
-        List<Map<String, Object>> data = result.get(queryName);
+        List<Map<String, Object>> data = result.getOrDefault(queryName, new ArrayList<>());
         List<GetClientProjectResponse> projects = new ArrayList<>();
         for (int i = 0; i < data.size(); i++) {
             GetClientProjectResponse.Builder builder = GetClientProjectResponse.newBuilder();
@@ -362,7 +363,7 @@ public class DataAccessService extends DataAccessServiceGrpc.DataAccessServiceIm
         dbRequest.setContentHandle(queryNameForProject);
         dbRequest.setProperty(paramName, request.getValue());
         Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
-        List<Map<String, Object>> data = result.get(queryNameForProject);
+        List<Map<String, Object>> data = result.getOrDefault(queryNameForProject, new ArrayList<>());
         List<ProjectProto> projects = new ArrayList<>();
         for (int i = 0; i < data.size(); i++) {
             ProjectProto.Builder builder = ProjectProto.newBuilder();
@@ -378,7 +379,7 @@ public class DataAccessService extends DataAccessServiceGrpc.DataAccessServiceIm
             projects.add(builder.build());
         }
 
-        List<Map<String, Object>> projectInfosData = result.get(queryNameForProjectInfo);
+        List<Map<String, Object>> projectInfosData = result.getOrDefault(queryNameForProjectInfo, new ArrayList<>());
         List<ProjectInfoProto> projectInfos = new ArrayList<>();
         for (int i = 0; i < projectInfosData.size(); i++) {
             ProjectInfoProto.Builder piBuilder = ProjectInfoProto.newBuilder();
@@ -405,7 +406,7 @@ public class DataAccessService extends DataAccessServiceGrpc.DataAccessServiceIm
         dbRequest.setContentHandle(queryName);
         dbRequest.setProperty("tdpis", String.valueOf(request.getDirectProjectId()));
         Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
-        List<Map<String, Object>> data = result.get(queryName);
+        List<Map<String, Object>> data = result.getOrDefault(queryName, new ArrayList<>());
         long clientId = 0;
         if (data != null) {
             if (data.size() > 0) {
@@ -427,7 +428,7 @@ public class DataAccessService extends DataAccessServiceGrpc.DataAccessServiceIm
         dbRequest.setProperty("userId", String.valueOf(request.getUserId()));
         dbRequest.setProperty("challengeId", String.valueOf(request.getChallengeId()));
         Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
-        List<Map<String, Object>> data = result.get(queryName);
+        List<Map<String, Object>> data = result.getOrDefault(queryName, new ArrayList<>());
         CheckUserChallengeEligibilityResponse response;
         if (data != null && data.isEmpty()) {
             response = CheckUserChallengeEligibilityResponse.getDefaultInstance();
@@ -479,7 +480,7 @@ public class DataAccessService extends DataAccessServiceGrpc.DataAccessServiceIm
         dbRequest.setContentHandle(queryName);
         dbRequest.setProperty(paramName, request.getValue());
         Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
-        List<Map<String, Object>> data = result.get(queryName);
+        List<Map<String, Object>> data = result.getOrDefault(queryName, new ArrayList<>());
         List<ProjectPhaseProto> phases = new ArrayList<>();
         for (int i = 0; i < data.size(); i++) {
             ProjectPhaseProto.Builder builder = ProjectPhaseProto.newBuilder();
@@ -550,8 +551,9 @@ public class DataAccessService extends DataAccessServiceGrpc.DataAccessServiceIm
         dbRequest.setContentHandle(queryName);
         dbRequest.setProperty("uid", String.valueOf(request.getUserId()));
         Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
-        List<Map<String, Object>> data = result.get(queryName);
-        List<Map<String, Object>> infoData = result.get("tcs_global_resource_infos_by_user");
+        List<Map<String, Object>> data = result.getOrDefault(queryName, new ArrayList<>());
+        List<Map<String, Object>> infoData = result.getOrDefault("tcs_global_resource_infos_by_user",
+                new ArrayList<>());
         responseObserver.onNext(getResourcesResponse(data, infoData));
         responseObserver.onCompleted();
     }
@@ -567,8 +569,9 @@ public class DataAccessService extends DataAccessServiceGrpc.DataAccessServiceIm
         dbRequest.setProperty("uid", String.valueOf(request.getUserId()));
         dbRequest.setProperty("stid", String.valueOf(request.getStatusId()));
         Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
-        List<Map<String, Object>> data = result.get(queryName);
-        List<Map<String, Object>> infoData = result.get("tcs_resource_infos_by_user_and_status");
+        List<Map<String, Object>> data = result.getOrDefault(queryName, new ArrayList<>());
+        List<Map<String, Object>> infoData = result.getOrDefault("tcs_resource_infos_by_user_and_status",
+                new ArrayList<>());
         responseObserver.onNext(getResourcesResponse(data, infoData));
         responseObserver.onCompleted();
     }

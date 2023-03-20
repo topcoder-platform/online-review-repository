@@ -1,5 +1,6 @@
 package com.topcoder.or.repository;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -33,7 +34,7 @@ public class WebCommonService extends WebCommonServiceGrpc.WebCommonServiceImplB
         dbRequest.setContentHandle(queryName);
         dbRequest.setProperty("uid", String.valueOf(request.getUserId()));
         Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
-        List<Map<String, Object>> userData = result.get(queryName);
+        List<Map<String, Object>> userData = result.getOrDefault(queryName, new ArrayList<>());
         GetUserPasswordResponse response;
         if (userData.isEmpty()) {
             response = GetUserPasswordResponse.getDefaultInstance();
@@ -63,7 +64,7 @@ public class WebCommonService extends WebCommonServiceGrpc.WebCommonServiceImplB
         dbRequest.setContentHandle(queryName);
         dbRequest.setProperty("uid", String.valueOf(request.getUserId()));
         Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
-        List<Map<String, Object>> userData = result.get(queryName);
+        List<Map<String, Object>> userData = result.getOrDefault(queryName, new ArrayList<>());
         GetUserTimezoneResponse response;
         if (userData.isEmpty()) {
             response = GetUserTimezoneResponse.getDefaultInstance();
@@ -86,7 +87,7 @@ public class WebCommonService extends WebCommonServiceGrpc.WebCommonServiceImplB
         String queryName = "member_count";
         dbRequest.setContentHandle(queryName);
         Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
-        List<Map<String, Object>> userData = result.get(queryName);
+        List<Map<String, Object>> userData = result.getOrDefault(queryName, new ArrayList<>());
         GetMemberCountResponse response;
         if (userData.isEmpty()) {
             response = GetMemberCountResponse.getDefaultInstance();
@@ -111,7 +112,7 @@ public class WebCommonService extends WebCommonServiceGrpc.WebCommonServiceImplB
         dbRequest.setContentHandle(queryName);
         dbRequest.setProperty("cr", String.valueOf(request.getUserId()));
         Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
-        List<Map<String, Object>> userData = result.get("coder_image_data");
+        List<Map<String, Object>> userData = result.getOrDefault("coder_image_data", new ArrayList<>());
         GetMemberImageResponse response;
         if (userData.isEmpty()) {
             response = GetMemberImageResponse.getDefaultInstance();
@@ -145,7 +146,7 @@ public class WebCommonService extends WebCommonServiceGrpc.WebCommonServiceImplB
         dbRequest.setContentHandle(queryName);
         dbRequest.setProperty("cr", String.valueOf(request.getCoderId()));
         Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
-        List<Map<String, Object>> userData = result.get(queryName);
+        List<Map<String, Object>> userData = result.getOrDefault(queryName, new ArrayList<>());
         GetCoderAllRatingsResponse response;
         if (userData.isEmpty()) {
             response = GetCoderAllRatingsResponse.getDefaultInstance();
@@ -237,7 +238,7 @@ public class WebCommonService extends WebCommonServiceGrpc.WebCommonServiceImplB
             dbRequest.setProperty(parameter.getKey(), parameter.getValue());
         }
         Map<String, List<Map<String, Object>>> result = dataAccess.getData(dbRequest);
-        List<Map<String, Object>> userData = result.get(queryName);
+        List<Map<String, Object>> userData = result.getOrDefault(queryName, new ArrayList<>());
         DoStartTagResponse.Builder response = DoStartTagResponse.newBuilder();
         if (userData != null) {
             for (Map<String, Object> row : userData) {
