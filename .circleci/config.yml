@@ -9,9 +9,9 @@ jobs:
       PROTOBUF_VERSION: v0.0.2
     steps:
       - checkout
-#      - restore_cache:
-#          keys:
-#            - protobuf-$PROTOBUF_VERSION-{{ checksum "pom.xml" }}
+      - restore_cache:
+          keys:
+            - protobuf-$PROTOBUF_VERSION-{{ checksum "pom.xml" }}
       - run:
           name: Download and build interface definitions
           command: |
