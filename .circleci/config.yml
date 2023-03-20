@@ -19,7 +19,6 @@ jobs:
               git clone --branch ${PROTOBUF_VERSION} --depth 1 ${PROTOBUF_REPO} protobuf
               cd protobuf
               mvn clean package
-              ls -la protobuf/target
             fi
       - persist_to_workspace:
           root: protobuf/target
