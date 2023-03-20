@@ -3,15 +3,15 @@ version: 2.1
 jobs:
   build_interface_definitions:
     docker:
-      - image: maven:3.8.3-openjdk-17
+      - image: maven:3.8.6-openjdk-18
     environment:
       PROTOBUF_REPO: https://github.com/topcoder-platform/online-review-interface-definition
       PROTOBUF_VERSION: v0.0.2
     steps:
       - checkout
-      - restore_cache:
-          keys:
-            - protobuf-$PROTOBUF_VERSION-{{ checksum "pom.xml" }}
+#      - restore_cache:
+#          keys:
+#            - protobuf-$PROTOBUF_VERSION-{{ checksum "pom.xml" }}
       - run:
           name: Download and build interface definitions
           command: |
@@ -19,6 +19,7 @@ jobs:
               git clone --branch ${PROTOBUF_VERSION} --depth 1 ${PROTOBUF_REPO} protobuf
               cd protobuf
               mvn clean package
+              ls -la protobuf/target
             fi
       - persist_to_workspace:
           root: protobuf/target
