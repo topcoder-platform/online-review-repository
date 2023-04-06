@@ -995,7 +995,7 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
             builder.setProjectId(projectId);
             ResultSetHelper.applyResultSetLong(rs, 1, builder::setId);
             ResultSetHelper.applyResultSetInt(rs, 2, builder::setPlace);
-            ResultSetHelper.applyResultSetInt(rs, 3, builder::setPrizeAmount);
+            ResultSetHelper.applyResultSetDouble(rs, 3, builder::setPrizeAmount);
             ResultSetHelper.applyResultSetInt(rs, 4, builder::setNumberOfSubmissions);
             PrizeTypeProto.Builder ptBuilder = PrizeTypeProto.newBuilder();
             ResultSetHelper.applyResultSetLong(rs, 5, ptBuilder::setId);
