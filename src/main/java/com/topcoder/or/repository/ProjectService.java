@@ -678,14 +678,14 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
     }
 
     @Override
-    public void updateProjectStatus(UpdateProjectStatusRequest request, StreamObserver<CountProto> responseObserver) {
-        validateUpdateProjectStatusRequest(request);
+    public void reactivateProject(ProjectIdProto request, StreamObserver<CountProto> responseObserver) {
+        validateProjectIdProto(request);
         String sql = """
                 UPDATE project
-                SET project_status_id = ?
-                WHERE project_id = ?
+                SET project_status_id = 1
+                WHERE project_id = ? AND project_status_id = 7
                 """;
-        int affected = dbAccessor.executeUpdate(sql, request.getStatusId(), request.getProjectId());
+        int affected = dbAccessor.executeUpdate(sql, request.getProjectId());
         responseObserver.onNext(CountProto.newBuilder().setCount(affected).build());
         responseObserver.onCompleted();
     }
@@ -1529,11 +1529,6 @@ public class ProjectService extends ProjectServiceGrpc.ProjectServiceImplBase {
         Helper.assertObjectNotNull(request::hasDestProjectId, "dest_project_id");
         Helper.assertObjectNotNull(request::hasSourceProjectId, "source_project_id");
         Helper.assertObjectNotNull(request::hasLinkTypeId, "link_type_id");
-    }
-
-    private void validateUpdateProjectStatusRequest(UpdateProjectStatusRequest request) {
-        Helper.assertObjectNotNull(request::hasProjectId, "project_id");
-        Helper.assertObjectNotNull(request::hasStatusId, "status_id");
     }
     /* #endregion */
 }
