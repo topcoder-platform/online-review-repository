@@ -521,7 +521,7 @@ public class ScorecardService extends ScorecardServiceGrpc.ScorecardServiceImplB
             ResultSetHelper.applyResultSetLong(rs, "status_id", builder::setScorecardStatusId);
             ResultSetHelper.applyResultSetLong(rs, "type_id", builder::setScorecardTypeId);
             ResultSetHelper.applyResultSetLong(rs, "project_category_id", builder::setProjectCategoryId);
-            ResultSetHelper.applyResultSetString(rs, "status_name", builder::setName);
+            ResultSetHelper.applyResultSetString(rs, "scorecard_name", builder::setName);
             ResultSetHelper.applyResultSetString(rs, "version", builder::setVersion);
             ResultSetHelper.applyResultSetFloat(rs, "min_score", builder::setMinScore);
             ResultSetHelper.applyResultSetFloat(rs, "max_score", builder::setMaxScore);
