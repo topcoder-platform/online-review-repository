@@ -244,7 +244,6 @@ public class DeliverableService extends DeliverableServiceGrpc.DeliverableServic
         List<Object> params = new ArrayList<>() {
             {
                 add(resourceId);
-                add(resourceId);
                 add(projectPhaseId);
             }
         };
