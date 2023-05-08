@@ -111,7 +111,9 @@ public class DeliverableService extends DeliverableServiceGrpc.DeliverableServic
                     """
                 .formatted(constructSQLCondition(
                         request.getDeliverableIdsList(), request.getResourceIdsList(), request.getPhaseIdsList(),
-                        request.getSubmissionIdsList()));
+                        (request.getSubmissionIdsList() != null && request.getSubmissionIdsCount() > 0)
+                                ? request.getSubmissionIdsList()
+                                : null));
         List<DeliverableWithSubmissionProto> result = dbAccessor.executeQuery(sql, (rs, _i) -> {
             DeliverableWithSubmissionProto.Builder builder = DeliverableWithSubmissionProto.newBuilder();
             ResultSetHelper.applyResultSetLong(rs, 1, builder::setProjectId);
@@ -597,10 +599,13 @@ public class DeliverableService extends DeliverableServiceGrpc.DeliverableServic
         Helper.assertObjectNotEmpty(request::getDeliverableIdsCount, "deliverable_ids");
         Helper.assertObjectNotEmpty(request::getPhaseIdsCount, "phase_ids");
         Helper.assertObjectNotEmpty(request::getResourceIdsCount, "resource_ids");
-        Helper.assertObjectNotEmpty(request::getSubmissionIdsCount, "submission_ids");
         if (request.getDeliverableIdsCount() != request.getResourceIdsCount()
-                || request.getDeliverableIdsCount() != request.getPhaseIdsCount()
-                || request.getDeliverableIdsCount() != request.getSubmissionIdsCount()) {
+                || request.getDeliverableIdsCount() != request.getPhaseIdsCount()) {
+            throw new IllegalArgumentException(
+                    "deliverableIds, resourceIds, phaseIds and submissionIds should have the same number of elements.");
+        }
+        if (request.getSubmissionIdsList() != null && request.getSubmissionIdsCount() > 0
+                && request.getDeliverableIdsCount() != request.getSubmissionIdsCount()) {
             throw new IllegalArgumentException(
                     "deliverableIds, resourceIds, phaseIds and submissionIds should have the same number of elements.");
         }
