@@ -167,7 +167,7 @@ public class WebCommonService extends WebCommonServiceGrpc.WebCommonServiceImplB
             }
             Integer hsAlgorithmRating = Helper.getInt(data, "hs_algorithm_rating");
             if (hsAlgorithmRating != null) {
-                builder.setAlgorithmRating(hsAlgorithmRating);
+                builder.setHsAlgorithmRating(hsAlgorithmRating);
             }
             Integer marathonMatchRating = Helper.getInt(data, "marathon_match_rating");
             if (marathonMatchRating != null) {
