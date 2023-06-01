@@ -360,10 +360,8 @@ public class DeliverableService extends DeliverableServiceGrpc.DeliverableServic
         validateSubmissionDeliverableCheckRequest(request);
         String sql = """
                 SELECT MAX(upload.modify_date) as modify_date FROM upload
-                INNER JOIN upload_type_lu ON upload.upload_type_id = upload_type_lu.upload_type_id
-                INNER JOIN upload_status_lu ON upload.upload_status_id = upload_status_lu.upload_status_id
                 LEFT JOIN submission ON upload.upload_id = submission.upload_id
-                WHERE upload_type_lu.name = 'Submission' AND upload_status_lu.name = 'Active'
+                WHERE upload.upload_type_id = 1 AND upload.upload_status_id = 1
                 AND upload.resource_id = ? AND submission.submission_type_id = ?
                 """;
         final Long resourceId = Helper.extract(request::hasResourceId, request::getResourceId);
