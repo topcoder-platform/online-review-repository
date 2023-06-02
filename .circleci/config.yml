@@ -59,21 +59,21 @@ jobs:
     <<: *defaults
     environment:
       PROTOBUF_REPO: https://github.com/topcoder-platform/online-review-interface-definition
-      PROTOBUF_VERSION: v0.0.3
+      PROTOBUF_VERSION: v0.0.4
     steps: *build_steps
 
   build-qa:
     <<: *defaults
     environment:
       PROTOBUF_REPO: https://github.com/topcoder-platform/online-review-interface-definition
-      PROTOBUF_VERSION: v0.0.3
+      PROTOBUF_VERSION: v0.0.4
     steps: *build_steps
 
   build-prod:
     <<: *defaults
     environment:
       PROTOBUF_REPO: https://github.com/topcoder-platform/online-review-interface-definition
-      PROTOBUF_VERSION: v0.0.3
+      PROTOBUF_VERSION: v0.0.4
     steps: *build_steps
 
   deploy-dev:
