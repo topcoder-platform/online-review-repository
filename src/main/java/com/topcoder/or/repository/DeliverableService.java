@@ -111,7 +111,9 @@ public class DeliverableService extends DeliverableServiceGrpc.DeliverableServic
                     """
                 .formatted(constructSQLCondition(
                         request.getDeliverableIdsList(), request.getResourceIdsList(), request.getPhaseIdsList(),
-                        request.getSubmissionIdsList()));
+                        (request.getSubmissionIdsList() != null && request.getSubmissionIdsCount() > 0)
+                                ? request.getSubmissionIdsList()
+                                : null));
         List<DeliverableWithSubmissionProto> result = dbAccessor.executeQuery(sql, (rs, _i) -> {
             DeliverableWithSubmissionProto.Builder builder = DeliverableWithSubmissionProto.newBuilder();
             ResultSetHelper.applyResultSetLong(rs, 1, builder::setProjectId);
@@ -242,7 +244,6 @@ public class DeliverableService extends DeliverableServiceGrpc.DeliverableServic
         List<Object> params = new ArrayList<>() {
             {
                 add(resourceId);
-                add(resourceId);
                 add(projectPhaseId);
             }
         };
@@ -359,10 +360,8 @@ public class DeliverableService extends DeliverableServiceGrpc.DeliverableServic
         validateSubmissionDeliverableCheckRequest(request);
         String sql = """
                 SELECT MAX(upload.modify_date) as modify_date FROM upload
-                INNER JOIN upload_type_lu ON upload.upload_type_id = upload_type_lu.upload_type_id
-                INNER JOIN upload_status_lu ON upload.upload_status_id = upload_status_lu.upload_status_id
                 LEFT JOIN submission ON upload.upload_id = submission.upload_id
-                WHERE upload_type_lu.name = 'Submission' AND upload_status_lu.name = 'Active'
+                WHERE upload.upload_type_id = 1 AND upload.upload_status_id = 1
                 AND upload.resource_id = ? AND submission.submission_type_id = ?
                 """;
         final Long resourceId = Helper.extract(request::hasResourceId, request::getResourceId);
@@ -597,10 +596,13 @@ public class DeliverableService extends DeliverableServiceGrpc.DeliverableServic
         Helper.assertObjectNotEmpty(request::getDeliverableIdsCount, "deliverable_ids");
         Helper.assertObjectNotEmpty(request::getPhaseIdsCount, "phase_ids");
         Helper.assertObjectNotEmpty(request::getResourceIdsCount, "resource_ids");
-        Helper.assertObjectNotEmpty(request::getSubmissionIdsCount, "submission_ids");
         if (request.getDeliverableIdsCount() != request.getResourceIdsCount()
-                || request.getDeliverableIdsCount() != request.getPhaseIdsCount()
-                || request.getDeliverableIdsCount() != request.getSubmissionIdsCount()) {
+                || request.getDeliverableIdsCount() != request.getPhaseIdsCount()) {
+            throw new IllegalArgumentException(
+                    "deliverableIds, resourceIds, phaseIds and submissionIds should have the same number of elements.");
+        }
+        if (request.getSubmissionIdsList() != null && request.getSubmissionIdsCount() > 0
+                && request.getDeliverableIdsCount() != request.getSubmissionIdsCount()) {
             throw new IllegalArgumentException(
                     "deliverableIds, resourceIds, phaseIds and submissionIds should have the same number of elements.");
         }

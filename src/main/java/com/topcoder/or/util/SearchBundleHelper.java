@@ -68,6 +68,7 @@ public final class SearchBundleHelper {
                 fields.put("phase_id", greaterThanZeroValidator);
                 fields.put("name", StringValidator.hasLength(greaterThanZeroValidator));
                 fields.put("required", IntegerValidator.inRange(Integer.MIN_VALUE, Integer.MAX_VALUE));
+                fields.put("resource_role_id", greaterThanZeroValidator);
                 break;
 
             case UPLOAD_SEARCH_BUNDLE:
